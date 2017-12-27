@@ -245,13 +245,24 @@ public class HealthMonitor {
   }
 
   private synchronized void enterState(State newState) {
+    LOG.info("Entering state " + newState);
     if (newState != state) {
-      LOG.info("Entering state " + newState);
-      state = newState;
+      boolean res = true;
       synchronized (callbacks) {
         for (Callback cb : callbacks) {
-          cb.enteredState(newState);
+          res &= cb.enteredState(newState);
         }
+      }
+      // When state changes, HealthMonitor will try to enter a new State. It will do some callbacks and
+      // change it's own state. But sometimes callback fails, such as asynchronous transition to active,
+      // then we shouldn't change HealthMonitor's state. It's state is allowed to chang only when all
+      // callbacks succeed.
+      // TODO: Now we only have one callback:HealthCallbacks, so the code is ok.
+      // TODO: But there are a list of callbacks so we need a solution when some callbacks succeed while others fail.
+      if (res) {
+        state = newState;
+      } else {
+        LOG.warn("Failed entering state " + newState + ". Stay in state " + state);
       }
     }
   }
@@ -316,7 +327,7 @@ public class HealthMonitor {
    * will terminate, entering HEALTH_MONITOR_FAILED state.
    */
   static interface Callback {
-    void enteredState(State newState);
+    boolean enteredState(State newState);
   }
 
   /**

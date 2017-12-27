@@ -25,6 +25,8 @@ import org.apache.hadoop.ha.HAServiceProtocol;
 import org.apache.hadoop.ha.HAServiceProtocol.StateChangeRequestInfo;
 import org.apache.hadoop.ha.HAServiceProtocol.RequestSource;
 import org.apache.hadoop.ha.HAServiceStatus;
+import org.apache.hadoop.ha.proto.HAServiceProtocolProtos.TransitionToActiveProgressResponseProto;
+import org.apache.hadoop.ha.proto.HAServiceProtocolProtos.TransitionToActiveProgressRequestProto;
 import org.apache.hadoop.ha.proto.HAServiceProtocolProtos.GetServiceStatusRequestProto;
 import org.apache.hadoop.ha.proto.HAServiceProtocolProtos.GetServiceStatusResponseProto;
 import org.apache.hadoop.ha.proto.HAServiceProtocolProtos.HAStateChangeRequestInfoProto;
@@ -109,6 +111,21 @@ public class HAServiceProtocolServerSideTranslatorPB implements
     } catch(IOException e) {
       throw new ServiceException(e);
     }
+  }
+
+  @Override
+  public TransitionToActiveProgressResponseProto transitionToActiveProgress(
+          RpcController controller,
+          TransitionToActiveProgressRequestProto request)
+          throws ServiceException {
+    boolean bool = false;
+    try {
+      bool = server.transitionToActiveProgress();
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
+    return TransitionToActiveProgressResponseProto.newBuilder()
+            .setInTransition(bool).build();
   }
 
   @Override

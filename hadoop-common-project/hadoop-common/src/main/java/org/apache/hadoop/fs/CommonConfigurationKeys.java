@@ -275,9 +275,24 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   
   /* Timeout that the FC waits for the new active to become active */
   public static final String HA_FC_NEW_ACTIVE_TIMEOUT_KEY =
-    "ha.failover-controller.new-active.rpc-timeout.ms";
+    "ha.failover-controller.new-active.timeout.ms";
   public static final int HA_FC_NEW_ACTIVE_TIMEOUT_DEFAULT = 60000;
-  
+
+  /* RPC Timeout that the FC waits for the new active to become active */
+  public static final String HA_FC_NEW_ACTIVE_RPC_TIMEOUT_KEY =
+          "ha.failover-controller.new-active.rpc-timeout.ms";
+  public static final int HA_FC_NEW_ACTIVE_RPC_TIMEOUT_DEFAULT = 60000;
+
+  /* RPC retry that the FC does when rpc fails */
+  public static final String HA_FC_NEW_ACTIVE_RPC_RETRY_KEY =
+          "ha.failover-controller.new-active.rpc-retry";
+  public static final int HA_FC_NEW_ACTIVE_RPC_RETRY_DEFAULT = 3;
+
+  /* Progress check interval while transition to active */
+  public static final String HA_FC_NEW_ACTIVE_PROGRESS_INTERVAL_KEY =
+          "ha.failover-controller.new-active.progress.interval";
+  public static final long HA_FC_NEW_ACTIVE_PROGRESS_INTERVAL_DEFAULT = 1000;
+
   /* Timeout that the FC waits for the old active to go to standby */
   public static final String HA_FC_GRACEFUL_FENCE_TIMEOUT_KEY =
     "ha.failover-controller.graceful-fence.rpc-timeout.ms";

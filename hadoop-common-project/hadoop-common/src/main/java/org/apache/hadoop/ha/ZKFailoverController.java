@@ -388,19 +388,24 @@ public abstract class ZKFailoverController {
     fatalError = err;
     notifyAll();
   }
-  
+
+  private volatile boolean inTransition = false;
+
   private synchronized void becomeActive() throws ServiceFailedException {
     LOG.info("Trying to make " + localTarget + " active...");
     try {
-      HAServiceProtocolHelper.transitionToActive(localTarget.getProxy(
-          conf, FailoverController.getRpcTimeoutToNewActive(conf)),
-          createReqInfo());
-      String msg = "Successfully transitioned " + localTarget +
-          " to active state";
-      LOG.info(msg);
-      serviceState = HAServiceState.ACTIVE;
-      recordActiveAttempt(new ActiveAttemptRecord(true, msg));
-
+      HAServiceProtocol proxy = localTarget.getProxy(conf, FailoverController.getRpcTimeoutToNewActive(conf));
+      HAServiceProtocolHelper.transitionToActive(proxy, createReqInfo(), conf);
+      if (proxy.getServiceStatus().getState() == HAServiceState.ACTIVE) {
+        String msg = "Successfully transitioned " + localTarget +
+                " to active state";
+        LOG.info(msg);
+        serviceState = HAServiceState.ACTIVE;
+        recordActiveAttempt(new ActiveAttemptRecord(true, msg));
+      } else {
+        int timeout = FailoverController.getTimeoutToNewActive(conf);
+        throw new IOException("Transition costs too much time. Stop waiting for it. Timeout is "+timeout+"(ms)");
+      }
     } catch (Throwable t) {
       String msg = "Couldn't make " + localTarget + " active";
       LOG.error(msg, t);
@@ -423,6 +428,8 @@ public abstract class ZKFailoverController {
 * calls use the same ID
 */
       
+    } finally {
+      inTransition = false;
     }
   }
 
@@ -642,7 +649,8 @@ public abstract class ZKFailoverController {
   private void doGracefulFailover()
       throws ServiceFailedException, IOException, InterruptedException {
     int timeout = FailoverController.getGracefulFenceTimeout(conf) * 2;
-    
+    timeout += FailoverController.getTimeoutToNewActive(conf);
+
     // Phase 1: pre-flight checks
     checkEligibleForFailover();
     
@@ -686,7 +694,7 @@ public abstract class ZKFailoverController {
 
     // Phase 4: wait for the normal election to make the local node
     // active.
-    ActiveAttemptRecord attempt = waitForActiveAttempt(timeout + 60000);
+    ActiveAttemptRecord attempt = waitForActiveAttempt(timeout);
     
     if (attempt == null) {
       // We didn't even make an attempt to become active.
@@ -954,9 +962,15 @@ public abstract class ZKFailoverController {
    */
   class HealthCallbacks implements HealthMonitor.Callback {
     @Override
-    public void enteredState(HealthMonitor.State newState) {
-      setLastHealthState(newState);
-      recheckElectability();
+    public boolean enteredState(HealthMonitor.State newState) {
+      if (inTransition && newState != State.SERVICE_HEALTHY) {
+        return false;
+      }
+      else {
+        setLastHealthState(newState);
+        recheckElectability();
+        return true;
+      }
     }
   }
 

@@ -164,7 +164,7 @@ public abstract class HAAdmin extends Configured implements Tool {
     }
     HAServiceProtocol proto = target.getProxy(
         getConf(), 0);
-    HAServiceProtocolHelper.transitionToActive(proto, createReqInfo());
+    HAServiceProtocolHelper.transitionToActive(proto, createReqInfo(), getConf());
     return 0;
   }
   
@@ -323,7 +323,7 @@ public abstract class HAAdmin extends Configured implements Tool {
   private int gracefulFailoverThroughZKFCs(HAServiceTarget toNode)
       throws IOException {
 
-    int timeout = FailoverController.getRpcTimeoutToNewActive(getConf());
+    int timeout = FailoverController.getTimeoutToNewActive(getConf());
     ZKFCProtocol proxy = toNode.getZKFCProxy(getConf(), timeout);
     try {
       proxy.gracefulFailover();

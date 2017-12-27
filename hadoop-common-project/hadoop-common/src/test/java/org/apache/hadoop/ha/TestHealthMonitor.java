@@ -132,7 +132,7 @@ public class TestHealthMonitor {
   public void testCallbackThrowsRTE() throws Exception {
     hm.addCallback(new Callback() {
       @Override
-      public void enteredState(State newState) {
+      public boolean enteredState(State newState) {
         throw new RuntimeException("Injected RTE");
       }
     });

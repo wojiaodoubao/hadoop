@@ -239,6 +239,7 @@ class DummyHAService extends HAServiceTarget {
     @Override
     public void transitionToActive(StateChangeRequestInfo req) throws ServiceFailedException,
         AccessControlException, IOException {
+      inTransition = true;
       activeTransitionCount++;
       checkUnreachable();
       if (failToBecomeActive) {
@@ -249,7 +250,15 @@ class DummyHAService extends HAServiceTarget {
       }
       state = HAServiceState.ACTIVE;
     }
-    
+
+
+    private boolean inTransition = false;
+
+    @Override
+    public boolean transitionToActiveProgress() {
+      return inTransition;
+    }
+
     @Override
     public void transitionToStandby(StateChangeRequestInfo req) throws ServiceFailedException,
         AccessControlException, IOException {

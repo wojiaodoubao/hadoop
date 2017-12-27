@@ -1695,11 +1695,47 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   @Override // HAServiceProtocol
   public synchronized void transitionToActive(StateChangeRequestInfo req) 
       throws ServiceFailedException, AccessControlException, IOException {
-    checkNNStartup();
-    nn.checkHaStateChange(req);
-    nn.transitionToActive();
+    class AsynchronousTransitionToActive extends Thread {
+      StateChangeRequestInfo req;
+      public AsynchronousTransitionToActive(StateChangeRequestInfo req) {
+        this.req = req;
+        setUncaughtExceptionHandler(new UncaughtExceptionHandler() {
+          @Override
+          public void uncaughtException(Thread t, Throwable e) {
+            LOG.warn("Transition failed. Couldn't handle Exception.", e);
+          }
+        });
+      }
+
+      @Override
+      public void run() {
+        try {
+          checkNNStartup();
+          nn.checkHaStateChange(req);
+          nn.transitionToActive();
+        } catch (IOException e) {
+          // TODO 这个异常得抛回给客户端
+          LOG.warn("Failed transition to Active!", e);
+        } finally {
+          inTransition = false;
+        }
+      }
+
+    }
+
+    if (!inTransition) {
+      inTransition = true;
+      new Thread(new AsynchronousTransitionToActive(req)).start();
+    }
   }
-  
+
+  private volatile boolean inTransition = false;
+
+  @Override
+  public boolean transitionToActiveProgress() {
+    return inTransition;
+  }
+
   @Override // HAServiceProtocol
   public synchronized void transitionToStandby(StateChangeRequestInfo req) 
       throws ServiceFailedException, AccessControlException, IOException {

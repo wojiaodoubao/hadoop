@@ -72,6 +72,19 @@ message TransitionToActiveResponseProto {
 /**
  * void request
  */
+message TransitionToActiveProgressRequestProto {
+}
+
+/**
+ * Returns whether NN is in transition
+ */
+message TransitionToActiveProgressResponseProto {
+    required bool inTransition = 1;
+}
+
+/**
+ * void request
+ */
 message TransitionToStandbyRequestProto { 
   required HAStateChangeRequestInfoProto reqInfo = 1;
 }
@@ -119,6 +132,12 @@ service HAServiceProtocolService {
    */
   rpc transitionToActive(TransitionToActiveRequestProto)
       returns(TransitionToActiveResponseProto);
+
+  /**
+   * Request service to check progress of transition to active
+   */
+  rpc transitionToActiveProgress(TransitionToActiveProgressRequestProto)
+      returns(TransitionToActiveProgressResponseProto);
 
   /**
    * Request service to transition to standby state.

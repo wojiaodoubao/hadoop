@@ -28,8 +28,11 @@ import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ha.HAServiceProtocol;
 import org.apache.hadoop.ha.HAServiceStatus;
+import org.apache.hadoop.ha.ServiceFailedException;
 import org.apache.hadoop.ha.proto.HAServiceProtocolProtos.GetServiceStatusRequestProto;
 import org.apache.hadoop.ha.proto.HAServiceProtocolProtos.GetServiceStatusResponseProto;
+import org.apache.hadoop.ha.proto.HAServiceProtocolProtos.TransitionToActiveProgressRequestProto;
+import org.apache.hadoop.ha.proto.HAServiceProtocolProtos.TransitionToActiveProgressResponseProto;
 import org.apache.hadoop.ha.proto.HAServiceProtocolProtos.HAStateChangeRequestInfoProto;
 import org.apache.hadoop.ha.proto.HAServiceProtocolProtos.HARequestSource;
 import org.apache.hadoop.ha.proto.HAServiceProtocolProtos.HAServiceStateProto;
@@ -40,6 +43,7 @@ import org.apache.hadoop.ipc.ProtobufHelper;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.ProtocolTranslator;
 import org.apache.hadoop.ipc.RPC;
+import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 
 import com.google.protobuf.RpcController;
@@ -60,7 +64,9 @@ public class HAServiceProtocolClientSideTranslatorPB implements
       MonitorHealthRequestProto.newBuilder().build();
   private final static GetServiceStatusRequestProto GET_SERVICE_STATUS_REQ = 
       GetServiceStatusRequestProto.newBuilder().build();
-  
+  private final static TransitionToActiveProgressRequestProto TRANSITION_TO_ACTIVE_PROGRESS_REQ =
+          TransitionToActiveProgressRequestProto.newBuilder().build();
+
   private final HAServiceProtocolPB rpcProxy;
 
   public HAServiceProtocolClientSideTranslatorPB(InetSocketAddress addr,
@@ -101,6 +107,18 @@ public class HAServiceProtocolClientSideTranslatorPB implements
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
     }
+  }
+
+  @Override
+  public boolean transitionToActiveProgress() throws ServiceFailedException, AccessControlException, IOException {
+    TransitionToActiveProgressResponseProto bool;
+    try {
+      bool = rpcProxy.transitionToActiveProgress(NULL_CONTROLLER,
+              TRANSITION_TO_ACTIVE_PROGRESS_REQ);
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+    return bool.getInTransition();
   }
 
   @Override

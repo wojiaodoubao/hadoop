@@ -87,10 +87,26 @@ public class FailoverController {
   
   static int getRpcTimeoutToNewActive(Configuration conf) {
     return conf.getInt(
-        CommonConfigurationKeys.HA_FC_NEW_ACTIVE_TIMEOUT_KEY,
-        CommonConfigurationKeys.HA_FC_NEW_ACTIVE_TIMEOUT_DEFAULT);
+            CommonConfigurationKeys.HA_FC_NEW_ACTIVE_RPC_TIMEOUT_KEY,
+            CommonConfigurationKeys.HA_FC_NEW_ACTIVE_RPC_TIMEOUT_DEFAULT);
   }
-  
+
+  static int getTimeoutToNewActive(Configuration conf) {
+    return conf.getInt(
+            CommonConfigurationKeys.HA_FC_NEW_ACTIVE_TIMEOUT_KEY,
+            CommonConfigurationKeys.HA_FC_NEW_ACTIVE_TIMEOUT_DEFAULT);
+  }
+
+  static int getRpcRetryTimesToNewActive(Configuration conf) {
+    return conf.getInt(CommonConfigurationKeys.HA_FC_NEW_ACTIVE_RPC_RETRY_KEY,
+            CommonConfigurationKeys.HA_FC_NEW_ACTIVE_RPC_RETRY_DEFAULT);
+  }
+
+  static long getCheckIntervalToNewActive(Configuration conf) {
+    return conf.getLong(CommonConfigurationKeys.HA_FC_NEW_ACTIVE_PROGRESS_INTERVAL_KEY,
+            CommonConfigurationKeys.HA_FC_NEW_ACTIVE_PROGRESS_INTERVAL_DEFAULT);
+  }
+
   /**
    * Perform pre-failover checks on the given service we plan to
    * failover to, eg to prevent failing over to a service (eg due
@@ -225,7 +241,7 @@ public class FailoverController {
     try {
       HAServiceProtocolHelper.transitionToActive(
           toSvc.getProxy(conf, rpcTimeoutToNewActive),
-          createReqInfo());
+          createReqInfo(), conf);
     } catch (ServiceFailedException sfe) {
       LOG.error("Unable to make " + toSvc + " active (" +
           sfe.getMessage() + "). Failing back.");

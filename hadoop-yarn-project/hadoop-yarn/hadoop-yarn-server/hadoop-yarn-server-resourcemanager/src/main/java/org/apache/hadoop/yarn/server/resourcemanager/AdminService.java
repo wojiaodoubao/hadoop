@@ -331,6 +331,11 @@ public class AdminService extends CompositeService implements
   }
 
   @Override
+  public boolean transitionToActiveProgress() throws ServiceFailedException, AccessControlException, IOException {
+    return false;
+  }
+
+  @Override
   public synchronized void transitionToStandby(
       HAServiceProtocol.StateChangeRequestInfo reqInfo) throws IOException {
     // call refreshAdminAcls before HA state transition

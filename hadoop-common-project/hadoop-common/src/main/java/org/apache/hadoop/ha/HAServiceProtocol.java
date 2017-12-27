@@ -131,6 +131,12 @@ public interface HAServiceProtocol {
                                           AccessControlException,
                                           IOException;
 
+  @Idempotent
+  public boolean transitionToActiveProgress()
+          throws ServiceFailedException,
+          AccessControlException,
+          IOException;
+
   /**
    * Request service to transition to standby state. No operation, if the
    * service is already in standby state.

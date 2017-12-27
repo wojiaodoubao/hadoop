@@ -21,8 +21,11 @@ import java.io.IOException;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ha.HAServiceProtocol.StateChangeRequestInfo;
 import org.apache.hadoop.ipc.RemoteException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Helper for making {@link HAServiceProtocol} RPC calls. This helper
@@ -31,6 +34,10 @@ import org.apache.hadoop.ipc.RemoteException;
 @InterfaceAudience.Public
 @InterfaceStability.Evolving
 public class HAServiceProtocolHelper {
+
+  private static final Logger LOG =
+          LoggerFactory.getLogger(HAServiceProtocolHelper.class);
+
   public static void monitorHealth(HAServiceProtocol svc,
       StateChangeRequestInfo reqInfo)
       throws IOException {
@@ -42,12 +49,41 @@ public class HAServiceProtocolHelper {
   }
 
   public static void transitionToActive(HAServiceProtocol svc,
-      StateChangeRequestInfo reqInfo)
+      StateChangeRequestInfo reqInfo,Configuration conf)
       throws IOException {
+    long endPoint = System.currentTimeMillis()+FailoverController.getTimeoutToNewActive(conf);
     try {
-      svc.transitionToActive(reqInfo);
+      svc.transitionToActive(reqInfo);// start transition
     } catch (RemoteException e) {
+      LOG.warn("Failed start transition.");
       throw e.unwrapRemoteException(ServiceFailedException.class);
+    }
+    long checkInterval = FailoverController.getCheckIntervalToNewActive(conf);
+    int retry = FailoverController.getRpcRetryTimesToNewActive(conf);
+    int fail = 0;
+    while (true) { // check transition periodically
+      try {
+        boolean inTransition = svc.transitionToActiveProgress();
+        fail = 0;
+        if (!inTransition || System.currentTimeMillis() >= endPoint) {
+          break;
+        }
+        Thread.sleep(checkInterval);
+      } catch (Exception e) {
+        fail ++;
+        if (e instanceof RemoteException) {
+          e = ((RemoteException)e).unwrapRemoteException(ServiceFailedException.class);
+        }
+        if (fail<retry && e instanceof IOException) {
+          if (fail<retry) {
+            LOG.warn("check transition to active failed "
+                    + fail + " times successively. " + (retry - fail)
+                    + " times left to try.", e);
+          } else {
+            throw (IOException) e;
+          }
+        }
+      }
     }
   }
 
