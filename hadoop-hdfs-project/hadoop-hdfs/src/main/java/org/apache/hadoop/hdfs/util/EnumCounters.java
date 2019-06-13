@@ -36,9 +36,9 @@ import java.util.Arrays;
  */
 public class EnumCounters<E extends Enum<E>> {
   /** The class of the enum. */
-  private final Class<E> enumClass;
+  protected final Class<E> enumClass;
   /** An array of longs corresponding to the enum type. */
-  private final long[] counters;
+  protected final long[] counters;
 
   /**
    * Construct counters for the given enum constants.
@@ -70,55 +70,55 @@ public class EnumCounters<E extends Enum<E>> {
   }
 
   /** Negate all counters. */
-  public final void negation() {
+  public void negation() {
     for(int i = 0; i < counters.length; i++) {
       counters[i] = -counters[i];
     }
   }
   
   /** Set counter e to the given value. */
-  public final void set(final E e, final long value) {
+  public void set(final E e, final long value) {
     counters[e.ordinal()] = value;
   }
 
   /** Set this counters to that counters. */
-  public final void set(final EnumCounters<E> that) {
+  public void set(final EnumCounters<E> that) {
     for(int i = 0; i < counters.length; i++) {
       this.counters[i] = that.counters[i];
     }
   }
 
   /** Reset all counters to zero. */
-  public final void reset() {
+  public void reset() {
     reset(0L);
   }
 
   /** Add the given value to counter e. */
-  public final void add(final E e, final long value) {
+  public void add(final E e, final long value) {
     counters[e.ordinal()] += value;
   }
 
   /** Add that counters to this counters. */
-  public final void add(final EnumCounters<E> that) {
+  public void add(final EnumCounters<E> that) {
     for(int i = 0; i < counters.length; i++) {
       this.counters[i] += that.counters[i];
     }
   }
 
   /** Subtract the given value from counter e. */
-  public final void subtract(final E e, final long value) {
+  public void subtract(final E e, final long value) {
     counters[e.ordinal()] -= value;
   }
 
   /** Subtract this counters from that counters. */
-  public final void subtract(final EnumCounters<E> that) {
+  public void subtract(final EnumCounters<E> that) {
     for(int i = 0; i < counters.length; i++) {
       this.counters[i] -= that.counters[i];
     }
   }
   
   /** @return the sum of all counters. */
-  public final long sum() {
+  public long sum() {
     long sum = 0;
     for(int i = 0; i < counters.length; i++) {
       sum += counters[i];
@@ -139,6 +139,13 @@ public class EnumCounters<E extends Enum<E>> {
   }
 
   @Override
+  public Object clone() {
+    EnumCounters newCounter = new EnumCounters(enumClass);
+    newCounter.set(this);
+    return newCounter;
+  }
+
+  @Override
   public int hashCode() {
     return Arrays.hashCode(counters);
   }
@@ -154,7 +161,7 @@ public class EnumCounters<E extends Enum<E>> {
     return b.substring(0, b.length() - 2);
   }
 
-  public final void reset(long val) {
+  public void reset(long val) {
     for(int i = 0; i < counters.length; i++) {
       this.counters[i] = val;
     }

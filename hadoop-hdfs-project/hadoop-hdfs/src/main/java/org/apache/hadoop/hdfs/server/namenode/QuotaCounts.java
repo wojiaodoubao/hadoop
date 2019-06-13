@@ -18,53 +18,112 @@
 
 package org.apache.hadoop.hdfs.server.namenode;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.fs.StorageType;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.util.ConstEnumCounters;
 import org.apache.hadoop.hdfs.util.EnumCounters;
+import org.apache.hadoop.hdfs.util.ConstEnumCounters.ConstEnumException;
 
 /**
  * Counters for namespace, storage space and storage type space quota and usage.
  */
 public class QuotaCounts {
+
+  public final static EnumCounters<Quota> QUOTA_RESET;
+  public final static EnumCounters<Quota> QUOTA_DEFAULT;
+  public final static EnumCounters<StorageType> STORAGE_TYPE_RESET;
+  public final static EnumCounters<StorageType> STORAGE_TYPE_DEFAULT;
+
+  static {
+    QUOTA_DEFAULT = new ConstEnumCounters(Quota.class, 0);
+    QUOTA_RESET = new ConstEnumCounters(Quota.class, HdfsConstants.QUOTA_RESET);
+    STORAGE_TYPE_DEFAULT = new ConstEnumCounters(StorageType.class, 0);
+    STORAGE_TYPE_RESET =
+        new ConstEnumCounters(StorageType.class, HdfsConstants.QUOTA_RESET);
+  }
+
+  interface CounterFunc<T extends Enum<T>> {
+    void func(EnumCounters<T> ec) throws ConstEnumException;
+  }
+
+  static <T extends Enum<T>> EnumCounters<T> modify(EnumCounters<T> ec,
+      CounterFunc<T> cf) {
+    try {
+      cf.func(ec);
+    } catch (ConstEnumException cee) {
+      ec = (EnumCounters<T>) ec.clone();
+      cf.func(ec);
+    }
+    return ec;
+  }
+
   // Name space and storage space counts (HDFS-7775 refactors the original disk
   // space count to storage space counts)
-  private EnumCounters<Quota> nsSsCounts;
+  @VisibleForTesting
+  protected EnumCounters<Quota> nsSsCounts;
   // Storage type space counts
-  private EnumCounters<StorageType> tsCounts;
+  @VisibleForTesting
+  protected EnumCounters<StorageType> tsCounts;
 
   public static class Builder {
     private EnumCounters<Quota> nsSsCounts;
     private EnumCounters<StorageType> tsCounts;
 
     public Builder() {
-      this.nsSsCounts = new EnumCounters<Quota>(Quota.class);
-      this.tsCounts = new EnumCounters<StorageType>(StorageType.class);
+      this.nsSsCounts = QUOTA_DEFAULT;
+      this.tsCounts = STORAGE_TYPE_DEFAULT;
     }
 
     public Builder nameSpace(long val) {
-      this.nsSsCounts.set(Quota.NAMESPACE, val);
+      if (val == HdfsConstants.QUOTA_RESET
+          && nsSsCounts.get(Quota.STORAGESPACE) == HdfsConstants.QUOTA_RESET) {
+        nsSsCounts = QUOTA_RESET;
+      } else if (val == 0 && nsSsCounts.get(Quota.STORAGESPACE) == 0) {
+        nsSsCounts = QUOTA_DEFAULT;
+      } else {
+        nsSsCounts = modify(nsSsCounts, ec->ec.set(Quota.NAMESPACE, val));
+      }
       return this;
     }
 
     public Builder storageSpace(long val) {
-      this.nsSsCounts.set(Quota.STORAGESPACE, val);
+      if (val == HdfsConstants.QUOTA_RESET
+          && nsSsCounts.get(Quota.NAMESPACE) == HdfsConstants.QUOTA_RESET) {
+        this.nsSsCounts = QUOTA_RESET;
+      } else if (val == 0 && nsSsCounts.get(Quota.NAMESPACE) == 0) {
+        this.nsSsCounts = QUOTA_DEFAULT;
+      } else {
+        nsSsCounts = modify(nsSsCounts, ec -> ec.set(Quota.STORAGESPACE, val));
+      }
       return this;
     }
 
     public Builder typeSpaces(EnumCounters<StorageType> val) {
       if (val != null) {
-        this.tsCounts.set(val);
+        if (val == STORAGE_TYPE_DEFAULT || val == STORAGE_TYPE_RESET) {
+          tsCounts = val;
+        } else {
+          tsCounts = modify(tsCounts, ec -> ec.set(val));
+        }
       }
       return this;
     }
 
     public Builder typeSpaces(long val) {
-      this.tsCounts.reset(val);
+      if (val == HdfsConstants.QUOTA_RESET) {
+        tsCounts = STORAGE_TYPE_RESET;
+      } else if (val == 0) {
+        tsCounts = STORAGE_TYPE_DEFAULT;
+      } else {
+        tsCounts = modify(tsCounts, ec -> ec.reset(val));
+      }
       return this;
     }
 
     public Builder quotaCount(QuotaCounts that) {
-      this.nsSsCounts.set(that.nsSsCounts);
-      this.tsCounts.set(that.tsCounts);
+      nsSsCounts = modify(nsSsCounts, ec -> ec.set(that.nsSsCounts));
+      tsCounts = modify(tsCounts, ec -> ec.set(that.tsCounts));
       return this;
     }
 
@@ -79,14 +138,14 @@ public class QuotaCounts {
   }
 
   public QuotaCounts add(QuotaCounts that) {
-    this.nsSsCounts.add(that.nsSsCounts);
-    this.tsCounts.add(that.tsCounts);
+    nsSsCounts = modify(nsSsCounts, ec -> ec.add(that.nsSsCounts));
+    tsCounts = modify(tsCounts, ec -> ec.add(that.tsCounts));
     return this;
   }
 
   public QuotaCounts subtract(QuotaCounts that) {
-    this.nsSsCounts.subtract(that.nsSsCounts);
-    this.tsCounts.subtract(that.tsCounts);
+    nsSsCounts = modify(nsSsCounts, ec->ec.subtract(that.nsSsCounts));
+    tsCounts = modify(tsCounts, ec->ec.subtract(that.tsCounts));
     return this;
   }
 
@@ -107,11 +166,19 @@ public class QuotaCounts {
   }
 
   public void setNameSpace(long nameSpaceCount) {
-    this.nsSsCounts.set(Quota.NAMESPACE, nameSpaceCount);
+    if (nameSpaceCount == HdfsConstants.QUOTA_RESET
+        && nsSsCounts.get(Quota.STORAGESPACE) == HdfsConstants.QUOTA_RESET) {
+      nsSsCounts = QUOTA_RESET;
+    } else if (nameSpaceCount == 0 && nsSsCounts.get(Quota.STORAGESPACE) == 0) {
+      nsSsCounts = QUOTA_DEFAULT;
+    } else {
+      nsSsCounts =
+          modify(nsSsCounts, ec -> ec.set(Quota.NAMESPACE, nameSpaceCount));
+    }
   }
 
   public void addNameSpace(long nsDelta) {
-    this.nsSsCounts.add(Quota.NAMESPACE, nsDelta);
+    nsSsCounts = modify(nsSsCounts, ec->ec.add(Quota.NAMESPACE, nsDelta));
   }
 
   public long getStorageSpace(){
@@ -119,11 +186,19 @@ public class QuotaCounts {
   }
 
   public void setStorageSpace(long spaceCount) {
-    this.nsSsCounts.set(Quota.STORAGESPACE, spaceCount);
+    if (spaceCount == HdfsConstants.QUOTA_RESET
+        && nsSsCounts.get(Quota.NAMESPACE) == HdfsConstants.QUOTA_RESET) {
+      nsSsCounts = QUOTA_RESET;
+    } else if (spaceCount == 0 && nsSsCounts.get(Quota.NAMESPACE) == 0) {
+      nsSsCounts = QUOTA_DEFAULT;
+    } else {
+      nsSsCounts =
+          modify(nsSsCounts, ec -> ec.set(Quota.STORAGESPACE, spaceCount));
+    }
   }
 
   public void addStorageSpace(long dsDelta) {
-    this.nsSsCounts.add(Quota.STORAGESPACE, dsDelta);
+    nsSsCounts = modify(nsSsCounts, ec->ec.add(Quota.STORAGESPACE, dsDelta));
   }
 
   public EnumCounters<StorageType> getTypeSpaces() {
@@ -135,7 +210,7 @@ public class QuotaCounts {
 
   void setTypeSpaces(EnumCounters<StorageType> that) {
     if (that != null) {
-      this.tsCounts.set(that);
+      tsCounts = modify(tsCounts, ec -> ec.set(that));
     }
   }
 
@@ -144,18 +219,29 @@ public class QuotaCounts {
   }
 
   void setTypeSpace(StorageType type, long spaceCount) {
-    this.tsCounts.set(type, spaceCount);
+    tsCounts = modify(tsCounts, ec->ec.set(type, spaceCount));
   }
 
   public void addTypeSpace(StorageType type, long delta) {
-    this.tsCounts.add(type, delta);
+    tsCounts = modify(tsCounts, ec->ec.add(type, delta));
   }
 
   public boolean anyNsSsCountGreaterOrEqual(long val) {
+    if (nsSsCounts == QUOTA_DEFAULT && val >= 0) {
+      return false;
+    } else if (nsSsCounts == QUOTA_RESET && val >= HdfsConstants.QUOTA_RESET) {
+      return false;
+    }
     return nsSsCounts.anyGreaterOrEqual(val);
   }
 
   public boolean anyTypeSpaceCountGreaterOrEqual(long val) {
+    if (tsCounts == STORAGE_TYPE_DEFAULT && val >= 0) {
+      return false;
+    } else if (tsCounts == STORAGE_TYPE_RESET
+        && val >= HdfsConstants.QUOTA_RESET) {
+      return false;
+    }
     return tsCounts.anyGreaterOrEqual(val);
   }
 
