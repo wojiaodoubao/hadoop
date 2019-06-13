@@ -47,6 +47,7 @@ import org.apache.hadoop.fs.FsServerDefaults;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.QuotaUsage;
 import org.apache.hadoop.fs.StorageType;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.junit.AfterClass;
@@ -215,6 +216,35 @@ public class TestViewFsDefaultValue {
     assertEquals(2, qu.getFileAndDirectoryCount());
     assertEquals(0, qu.getTypeConsumed(StorageType.SSD));
     assertTrue(qu.getSpaceConsumed() > 0);
+  }
+
+  /**
+   * Test that getQuotaUsage when fallback is disabled.
+   */
+  @Test
+  public void testGetQuotaUsageWithoutFallback() throws Exception {
+    Configuration conf = new Configuration(CONF);
+    conf.setBoolean(DFSConfigKeys.DFS_FALL_BACK_TO_COUNT, false);
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
+        .numDataNodes(DFS_REPLICATION_DEFAULT + 1).build()) {
+      cluster.waitClusterUp();
+
+      Configuration config = ViewFileSystemTestSetup.createConfig();
+      ConfigUtil.addLink(config, "/tmp",
+          new URI(cluster.getFileSystem(0).getUri().toString() + "/tmp"));
+      FileSystem ivfs = FileSystem.get(FsConstants.VIEWFS_URI, config);
+
+      FileSystem hFs = cluster.getFileSystem(0);
+      final DistributedFileSystem dfs = (DistributedFileSystem) hFs;
+      dfs.mkdirs(testFileDirPath);
+      QuotaUsage qu = ivfs.getQuotaUsage(testFileDirPath);
+      assertEquals(-1, qu.getTypeQuota(StorageType.SSD));
+      assertEquals(-1, qu.getQuota());
+      assertEquals(-1, qu.getSpaceQuota());
+      assertEquals(-1, qu.getFileAndDirectoryCount());
+      assertEquals(-1, qu.getSpaceConsumed());
+      assertEquals(-1, qu.getTypeConsumed(StorageType.SSD));
+    }
   }
 
   @AfterClass

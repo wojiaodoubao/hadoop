@@ -1872,9 +1872,7 @@ public class PBHelperClient {
         setQuota(qu.getQuota()).
         setSpaceConsumed(qu.getSpaceConsumed()).
         setSpaceQuota(qu.getSpaceQuota());
-    if (qu.isTypeQuotaSet() || qu.isTypeConsumedAvailable()) {
-      builder.setTypeQuotaInfos(getBuilder(qu));
-    }
+    builder.setTypeQuotaInfos(getBuilder(qu));
     return builder.build();
   }
 

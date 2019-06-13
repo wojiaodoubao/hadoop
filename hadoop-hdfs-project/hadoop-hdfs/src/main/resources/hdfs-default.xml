@@ -4858,6 +4858,14 @@
 </property>
 
 <property>
+  <name>dfs.fall.back.to.count</name>
+  <value></value>
+  <description>
+    If true, enables counting directory for rpc getQuotaUsage().
+  </description>
+</property>
+
+<property>
   <name>dfs.secondary.namenode.kerberos.principal</name>
   <value></value>
   <description>

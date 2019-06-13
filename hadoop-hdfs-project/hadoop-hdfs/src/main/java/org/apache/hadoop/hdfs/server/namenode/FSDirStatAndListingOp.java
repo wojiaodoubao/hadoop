@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.DirectoryListingStartAfterNotFoundException;
 import org.apache.hadoop.fs.FileEncryptionInfo;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.QuotaUsage;
@@ -559,9 +560,18 @@ class FSDirStatAndListingOp {
     QuotaUsage usage = getQuotaUsageInt(fsd, iip);
     if (usage != null) {
       return usage;
-    } else {
+    } else if (fsd.isFallBackToCount()) {
       //If quota isn't set, fall back to getContentSummary.
       return getContentSummaryInt(fsd, pc, iip);
+    } else {
+      long[] tq = new long[StorageType.values().length];
+      for (int i = 0; i < tq.length; i++) {
+        tq[i] = HdfsConstants.QUOTA_RESET;
+      }
+      QuotaUsage qu = new QuotaUsage.Builder().quota(HdfsConstants.QUOTA_RESET)
+          .spaceQuota(HdfsConstants.QUOTA_RESET).typeQuota(tq)
+          .fileAndDirectoryCount(-1).spaceConsumed(-1).typeConsumed(tq).build();
+      return qu;
     }
   }
 

@@ -84,6 +84,8 @@ import java.util.concurrent.RecursiveAction;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeys.FS_PROTECTED_DIRECTORIES;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_FALL_BACK_TO_COUNT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_FALL_BACK_TO_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_QUOTA_BY_STORAGETYPE_ENABLED_DEFAULT;
@@ -195,6 +197,7 @@ public class FSDirectory implements Closeable {
   private final boolean storagePolicyEnabled;
   // whether quota by storage type is allowed
   private final boolean quotaByStorageTypeEnabled;
+  private final boolean fallBackToCount;
 
   private final String fsOwnerShortUserName;
   private final String supergroup;
@@ -318,6 +321,8 @@ public class FSDirectory implements Closeable {
     this.quotaByStorageTypeEnabled =
         conf.getBoolean(DFS_QUOTA_BY_STORAGETYPE_ENABLED_KEY,
                         DFS_QUOTA_BY_STORAGETYPE_ENABLED_DEFAULT);
+    this.fallBackToCount =
+        conf.getBoolean(DFS_FALL_BACK_TO_COUNT, DFS_FALL_BACK_TO_COUNT_DEFAULT);
 
     int configuredLimit = conf.getInt(
         DFSConfigKeys.DFS_LIST_LIMIT, DFSConfigKeys.DFS_LIST_LIMIT_DEFAULT);
@@ -572,6 +577,9 @@ public class FSDirectory implements Closeable {
   }
   boolean isQuotaByStorageTypeEnabled() {
     return quotaByStorageTypeEnabled;
+  }
+  boolean isFallBackToCount() {
+    return fallBackToCount;
   }
 
 

@@ -982,6 +982,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
 
   public static final String  DFS_QUOTA_BY_STORAGETYPE_ENABLED_KEY = "dfs.quota.by.storage.type.enabled";
   public static final boolean DFS_QUOTA_BY_STORAGETYPE_ENABLED_DEFAULT = true;
+  public static final String DFS_FALL_BACK_TO_COUNT = "dfs.fall.back.to.count";
+  public static final boolean DFS_FALL_BACK_TO_COUNT_DEFAULT = true;
 
   // HA related configuration
   public static final String DFS_HA_NAMENODES_KEY_PREFIX =
