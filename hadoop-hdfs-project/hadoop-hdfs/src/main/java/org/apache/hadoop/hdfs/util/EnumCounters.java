@@ -34,11 +34,11 @@ import java.util.Arrays;
  *
  * @param <E> the enum type
  */
-public class EnumCounters<E extends Enum<E>> {
+public class EnumCounters<E extends Enum<E>> implements Cloneable {
   /** The class of the enum. */
-  protected final Class<E> enumClass;
+  private final Class<E> enumClass;
   /** An array of longs corresponding to the enum type. */
-  protected final long[] counters;
+  private final long[] counters;
 
   /**
    * Construct counters for the given enum constants.
