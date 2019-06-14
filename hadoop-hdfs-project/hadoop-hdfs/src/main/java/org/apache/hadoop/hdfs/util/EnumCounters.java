@@ -184,4 +184,13 @@ public class EnumCounters<E extends Enum<E>> {
     }
     return false;
   }
+
+  public boolean allEqual(long val) {
+    for (long c: counters) {
+      if (c != val) {
+        return false;
+      }
+    }
+    return true;
+  }
 }

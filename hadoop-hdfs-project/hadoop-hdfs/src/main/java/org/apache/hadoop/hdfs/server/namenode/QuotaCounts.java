@@ -30,6 +30,17 @@ import org.apache.hadoop.hdfs.util.ConstEnumCounters.ConstEnumException;
  */
 public class QuotaCounts {
 
+  /**
+   * We pre-define 4 most common used EnumCounters objects. When the nsSsCounts
+   * and tsCounts are set to the 4 most common used value, we just point them to
+   * the pre-defined const EnumCounters objects instead of constructing many
+   * objects with the same value. See HDFS-14547.
+   * The 4 EnumCounters objects are:
+   * EnumCounters<Quota> filled with all 0.
+   * EnumCounters<Quota> filled with all -1.
+   * EnumCounters<StorageType> filled with all 0.
+   * EnumCounters<StorageType> filled with all -1.
+   * */
   public final static EnumCounters<Quota> QUOTA_RESET;
   public final static EnumCounters<Quota> QUOTA_DEFAULT;
   public final static EnumCounters<StorageType> STORAGE_TYPE_RESET;
@@ -209,7 +220,13 @@ public class QuotaCounts {
   }
 
   void setTypeSpaces(EnumCounters<StorageType> that) {
-    if (that != null) {
+    if (that == null) {
+      return;
+    } else if (that.allEqual(0)) {
+      tsCounts = STORAGE_TYPE_DEFAULT;
+    } else if (that.allEqual(-1)) {
+      tsCounts = STORAGE_TYPE_RESET;
+    } else {
       tsCounts = modify(tsCounts, ec -> ec.set(that));
     }
   }
