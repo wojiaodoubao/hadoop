@@ -1579,6 +1579,32 @@ public class TestQuota {
   }
 
   @Test
+  public void testStorageTypeQuotaCheckOnSetStoragePolicy()
+      throws Exception {
+    final Path parent = new Path(PathUtils.getTestDir(getClass()).getPath(),
+        GenericTestUtils.getMethodName());
+    assertTrue(dfs.mkdirs(parent));
+
+    int fileLen = 1024;
+    short replication = 3;
+    int fileSpace = fileLen * replication;
+
+    final Path quotaDir20 = new Path(parent, "nqdir0/qdir1/qdir20");
+    assertTrue(dfs.mkdirs(quotaDir20));
+    dfs.setQuota(quotaDir20, HdfsConstants.QUOTA_DONT_SET, 6 * fileSpace);
+    dfs.setQuotaByStorageType(quotaDir20, StorageType.SSD, 2 * fileSpace);
+
+    Path file = new Path(quotaDir20, "fileDir/file1");
+    DFSTestUtil.createFile(dfs, file, fileLen, replication, 0);
+    try {
+      dfs.setStoragePolicy(quotaDir20,
+          HdfsConstants.ALLSSD_STORAGE_POLICY_NAME);
+      fail("expect QuotaByStorageTypeExceededException");
+    } catch (QuotaByStorageTypeExceededException qe) {
+    }
+  }
+
+  @Test
   public void testSpaceQuotaExceptionOnAppend() throws Exception {
     GenericTestUtils.setLogLevel(DFSOutputStream.LOG, Level.TRACE);
     GenericTestUtils.setLogLevel(DataStreamer.LOG, Level.TRACE);
