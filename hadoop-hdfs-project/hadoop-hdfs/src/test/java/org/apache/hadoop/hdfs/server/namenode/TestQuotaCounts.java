@@ -43,6 +43,7 @@ public class TestQuotaCounts {
     qc.setNameSpace(2);
     assertEquals(2, qc.getNameSpace());
     assertTrue(qc.nsSsCounts != QuotaCounts.QUOTA_RESET);
+    qc.addNameSpace(1);
 
     QuotaCounts qc2 = new QuotaCounts.Builder().build();
     assertTrue(qc2.tsCounts == QuotaCounts.STORAGE_TYPE_DEFAULT);
@@ -52,6 +53,7 @@ public class TestQuotaCounts {
     qc.setTypeSpace(StorageType.DISK, 100);
     assertEquals(100, qc.getTypeSpace(StorageType.DISK));
     assertTrue(qc.tsCounts != QuotaCounts.STORAGE_TYPE_DEFAULT);
+    qc.addTypeSpace(StorageType.DISK, 20);
 
     qc.setNameSpace(0);
     qc.setStorageSpace(0);

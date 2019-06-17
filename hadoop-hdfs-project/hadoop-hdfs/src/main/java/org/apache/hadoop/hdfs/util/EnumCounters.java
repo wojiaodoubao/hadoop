@@ -34,7 +34,7 @@ import java.util.Arrays;
  *
  * @param <E> the enum type
  */
-public class EnumCounters<E extends Enum<E>> implements Cloneable {
+public class EnumCounters<E extends Enum<E>> {
   /** The class of the enum. */
   private final Class<E> enumClass;
   /** An array of longs corresponding to the enum type. */
@@ -138,8 +138,10 @@ public class EnumCounters<E extends Enum<E>> implements Cloneable {
         && Arrays.equals(this.counters, that.counters);
   }
 
-  @Override
-  public Object clone() {
+  /**
+   * Return a deep copy of EnumCounter.
+   * */
+  public EnumCounters deepCopyEnumCounter() {
     EnumCounters newCounter = new EnumCounters(enumClass);
     newCounter.set(this);
     return newCounter;

@@ -63,7 +63,9 @@ public class QuotaCounts {
     try {
       cf.func(ec);
     } catch (ConstEnumException cee) {
-      ec = (EnumCounters<T>) ec.clone();
+      // We don't call clone here because ConstEnumCounters.clone() will return
+      // an object of class ConstEnumCounters. We want EnumCounters.
+      ec = ec.deepCopyEnumCounter();
       cf.func(ec);
     }
     return ec;
