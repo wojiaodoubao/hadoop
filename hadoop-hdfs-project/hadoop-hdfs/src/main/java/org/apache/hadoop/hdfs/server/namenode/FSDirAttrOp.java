@@ -28,6 +28,8 @@ import org.apache.hadoop.fs.XAttrSetFlag;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
+import org.apache.hadoop.hdfs.protocol.BlockType;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.SnapshotAccessControlException;
@@ -439,7 +441,34 @@ public class FSDirAttrOp {
             "Existing policy " + currentPolicy.getName() +
                 " cannot be changed after file creation.");
       }
-      inode.asFile().setStoragePolicyID(policyId, snapshotId);
+
+      INodeFile iFile = iip.getLastINode().asFile();
+      final BlockType blockType = iFile.getBlockType();
+      byte curPolicyId = iFile.getLocalStoragePolicyID();
+      long fileSize = iFile.computeFileSize(true, true);
+      EnumCounters<StorageType> curCount;
+      EnumCounters<StorageType> newCount;
+      short rep;
+      if (blockType == BlockType.STRIPED) {
+        byte ecId = iFile.getErasureCodingPolicyID();
+        ErasureCodingPolicy ecPolicy =
+            fsd.getFSNamesystem().getErasureCodingPolicyManager().getByID(ecId);
+        short numDataUnits = (short) ecPolicy.getNumDataUnits();
+        short numParityUnits = (short) ecPolicy.getNumParityUnits();
+        short numLocations = (short) (numDataUnits + numParityUnits);
+        rep = numLocations;
+      } else {
+        rep = iFile.getFileReplication();
+      }
+      curCount = fsd.getStorageTypeDeltas(curPolicyId, fileSize, rep, rep);
+      newCount = fsd.getStorageTypeDeltas(policyId, fileSize, rep, rep);
+      curCount.negation();
+      curCount.add(newCount);
+      QuotaCounts qc = new QuotaCounts.Builder().typeSpaces(curCount).build();
+      // check quota limits and updated space consumed
+      fsd.updateCount(iip, iip.length() - 1, qc, true);
+
+      iFile.setStoragePolicyID(policyId, snapshotId);
     } else if (inode.isDirectory()) {
       setDirStoragePolicy(fsd, iip, policyId);
     } else {

@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY;
+import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.is;
@@ -1581,26 +1582,66 @@ public class TestQuota {
   @Test
   public void testStorageTypeQuotaCheckOnSetStoragePolicy()
       throws Exception {
-    final Path parent = new Path(PathUtils.getTestDir(getClass()).getPath(),
-        GenericTestUtils.getMethodName());
-    assertTrue(dfs.mkdirs(parent));
-
     int fileLen = 1024;
     short replication = 3;
     int fileSpace = fileLen * replication;
 
+    final Path parent = new Path(PathUtils.getTestDir(getClass()).getPath(),
+        GenericTestUtils.getMethodName());
+    assertTrue(dfs.mkdirs(parent));
     final Path quotaDir20 = new Path(parent, "nqdir0/qdir1/qdir20");
     assertTrue(dfs.mkdirs(quotaDir20));
-    dfs.setQuota(quotaDir20, HdfsConstants.QUOTA_DONT_SET, 6 * fileSpace);
-    dfs.setQuotaByStorageType(quotaDir20, StorageType.SSD, 2 * fileSpace);
-
-    Path file = new Path(quotaDir20, "fileDir/file1");
+    dfs.setQuota(quotaDir20, HdfsConstants.QUOTA_DONT_SET, fileSpace);
+    Path file = new Path(quotaDir20, "file1");
     DFSTestUtil.createFile(dfs, file, fileLen, replication, 0);
+
+    dfs.setStoragePolicy(file, HdfsConstants.HOT_STORAGE_POLICY_NAME);
+    // check the consume.
+    int nameConsume = 1;
+    Path tmp = file;
+    while (tmp != null) {
+      QuotaUsage qu = dfs.getQuotaUsage(tmp);
+      assertEquals(nameConsume, qu.getFileAndDirectoryCount());
+      assertEquals(fileSpace, qu.getSpaceConsumed());
+      for (StorageType st : StorageType.values()) {
+        if (st == StorageType.DISK) {
+          assertEquals(fileSpace, qu.getTypeConsumed(st));
+        } else {
+          assertEquals(0, qu.getTypeConsumed(st));
+        }
+      }
+      nameConsume++;
+      tmp = tmp.getParent();
+    }
+
+    // change policy to ALL_SSD, expect QuotaByStorageTypeExceededException.
+    dfs.setQuotaByStorageType(quotaDir20, StorageType.SSD, fileSpace-1);
     try {
-      dfs.setStoragePolicy(quotaDir20,
-          HdfsConstants.ALLSSD_STORAGE_POLICY_NAME);
+      dfs.setStoragePolicy(file, HdfsConstants.ALLSSD_STORAGE_POLICY_NAME);
       fail("expect QuotaByStorageTypeExceededException");
-    } catch (QuotaByStorageTypeExceededException qe) {
+    } catch (Exception e) {
+      assertExceptionContains("QuotaByStorageTypeExceededException", e);
+    }
+
+    // change policy to ALL_SSD. It should success this time.
+    dfs.setQuotaByStorageType(quotaDir20, StorageType.SSD, fileSpace);
+    dfs.setStoragePolicy(file, HdfsConstants.ALLSSD_STORAGE_POLICY_NAME);
+    // check the consume.
+    nameConsume = 1;
+    tmp = file;
+    while (tmp != null) {
+      QuotaUsage qu = dfs.getQuotaUsage(tmp);
+      assertEquals(nameConsume, qu.getFileAndDirectoryCount());
+      assertEquals(fileSpace, qu.getSpaceConsumed());
+      for (StorageType st : StorageType.values()) {
+        if (st == StorageType.SSD) {
+          assertEquals(fileSpace, qu.getTypeConsumed(st));
+        } else {
+          assertEquals(0, qu.getTypeConsumed(st));
+        }
+      }
+      nameConsume++;
+      tmp = tmp.getParent();
     }
   }
 
