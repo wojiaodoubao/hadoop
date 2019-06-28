@@ -22,7 +22,7 @@ package org.apache.hadoop.hdfs.util;
  *
  * It's the const version of EnumCounters. Any modification ends with a
  * ConstEnumException.
- * See {@link EnumCounters}
+ * See {@see EnumCounters}
  */
 public class ConstEnumCounters<E extends Enum<E>> extends EnumCounters<E> {
 
@@ -30,14 +30,15 @@ public class ConstEnumCounters<E extends Enum<E>> extends EnumCounters<E> {
    * An exception class for modification on ConstEnumCounters.
    * */
   public static class ConstEnumException extends RuntimeException {
-    public ConstEnumException(String msg) {
+    private ConstEnumException(String msg) {
       super(msg);
     }
   }
 
-  // Throwing CONST_ENUM_EXCEPTION if any modification happens, so we can avoid
-  // overheads of constructing stack trace.
-  public static final ConstEnumException CONST_ENUM_EXCEPTION =
+  /**
+   * Throwing this exception if any modification occurs.
+   * */
+  private static final ConstEnumException CONST_ENUM_EXCEPTION =
       new ConstEnumException("modification on const.");
 
   public ConstEnumCounters(Class<E> enumClass, long defaultVal) {
@@ -45,46 +46,47 @@ public class ConstEnumCounters<E extends Enum<E>> extends EnumCounters<E> {
     forceReset(defaultVal);
   }
 
-  /** Negate all counters. */
+  @Override
   public final void negation() {
     throw CONST_ENUM_EXCEPTION;
   }
 
-  /** Set counter e to the given value. */
+  @Override
   public final void set(final E e, final long value) {
     throw CONST_ENUM_EXCEPTION;
   }
 
-  /** Set this counters to that counters. */
+  @Override
   public final void set(final EnumCounters<E> that) {
     throw CONST_ENUM_EXCEPTION;
   }
 
-  /** Reset all counters to zero. */
+  @Override
   public final void reset() {
     throw CONST_ENUM_EXCEPTION;
   }
 
-  /** Add the given value to counter e. */
+  @Override
   public final void add(final E e, final long value) {
     throw CONST_ENUM_EXCEPTION;
   }
 
-  /** Add that counters to this counters. */
+  @Override
   public final void add(final EnumCounters<E> that) {
     throw CONST_ENUM_EXCEPTION;
   }
 
-  /** Subtract the given value from counter e. */
+  @Override
   public final void subtract(final E e, final long value) {
     throw CONST_ENUM_EXCEPTION;
   }
 
-  /** Subtract this counters from that counters. */
+  @Override
   public final void subtract(final EnumCounters<E> that) {
     throw CONST_ENUM_EXCEPTION;
   }
 
+  @Override
   public final void reset(long val) {
     throw CONST_ENUM_EXCEPTION;
   }

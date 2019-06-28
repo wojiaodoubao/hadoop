@@ -141,8 +141,8 @@ public class EnumCounters<E extends Enum<E>> {
   /**
    * Return a deep copy of EnumCounter.
    * */
-  public EnumCounters deepCopyEnumCounter() {
-    EnumCounters newCounter = new EnumCounters(enumClass);
+  public EnumCounters<E> deepCopyEnumCounter() {
+    EnumCounters<E> newCounter = new EnumCounters(enumClass);
     newCounter.set(this);
     return newCounter;
   }
