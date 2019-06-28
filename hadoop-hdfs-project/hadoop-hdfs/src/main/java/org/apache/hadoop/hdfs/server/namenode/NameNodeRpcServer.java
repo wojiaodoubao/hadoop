@@ -1766,6 +1766,17 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     namesystem.logAuditEvent(true, "refreshCallQueue", null);
   }
 
+  @Override // RefreshCallQueueProtocol
+  public void refreshReaderQueue() {
+    LOG.info("Refreshing reader queue.");
+
+    Configuration conf = new Configuration();
+    clientRpcServer.refreshReaderQueue(conf);
+    if (this.serviceRpcServer != null) {
+      serviceRpcServer.refreshReaderQueue(conf);
+    }
+  }
+
   @Override // GenericRefreshProtocol
   public Collection<RefreshResponse> refresh(String identifier, String[] args) {
     // Let the registry handle as needed

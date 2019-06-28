@@ -674,6 +674,13 @@ public abstract class Server {
     return serviceAuthorizationManager;
   }
 
+  static Class<? extends BlockingQueue<Connection>> getPendingConnectionClass(
+      String prefix, Configuration conf) {
+    String k = prefix + "." + CommonConfigurationKeys.IPC_READERQUEUE_IMPL_KEY;
+    Class<?> pendingClass = conf.getClass(k, LinkedBlockingQueue.class);
+    return CallQueueManager.convertQueueClass(pendingClass, Connection.class);
+   }
+
   private String getQueueClassPrefix() {
     return CommonConfigurationKeys.IPC_NAMESPACE + "." + port;
   }
@@ -722,6 +729,16 @@ public abstract class Server {
     callQueue.swapQueue(getSchedulerClass(prefix, conf),
         getQueueClass(prefix, conf), maxQueueSize, prefix, conf);
     callQueue.setClientBackoffEnabled(getClientBackoffEnable(prefix, conf));
+  }
+
+  /*
+   * Refresh the call queue
+   */
+  public synchronized void refreshReaderQueue(Configuration conf) {
+    Listener.Reader[] readers = listener.getReaders();
+    for (Listener.Reader r : readers) {
+      r.refreshPendingConnections(conf);
+    }
   }
 
   /**
@@ -1195,8 +1212,8 @@ public abstract class Server {
       selector= Selector.open();
       readers = new Reader[readThreads];
       for (int i = 0; i < readThreads; i++) {
-        Reader reader = new Reader(
-            "Socket Reader #" + (i + 1) + " for port " + port);
+        Reader reader = new Reader("Socket Reader #" + (i + 1) +
+            " for port " + port, i + 1);
         readers[i] = reader;
         reader.start();
       }
@@ -1208,14 +1225,17 @@ public abstract class Server {
     }
     
     private class Reader extends Thread {
-      final private BlockingQueue<Connection> pendingConnections;
+      private SwapQueueManager<Connection> pendingConnections;
       private final Selector readSelector;
+      private final int num;
 
-      Reader(String name) throws IOException {
+      Reader(String name, int num) throws IOException {
         super(name);
-
-        this.pendingConnections =
-            new LinkedBlockingQueue<Connection>(readerPendingConnectionQueue);
+        this.num = num;
+        final String prefix = getQueueClassPrefix();
+        this.pendingConnections = new SwapQueueManager<Connection>(
+            getPendingConnectionClass(prefix, conf),
+            readerPendingConnectionQueue, "reader-" + num, conf);
         this.readSelector = Selector.open();
       }
       
@@ -1295,6 +1315,14 @@ public abstract class Server {
         } catch (InterruptedException ie) {
           Thread.currentThread().interrupt();
         }
+      }
+
+      void refreshPendingConnections(Configuration config) {
+        final String prefix = getQueueClassPrefix();
+        String ns = "reader-" + num;
+        pendingConnections.swapQueue(getSchedulerClass(prefix, conf),
+            getPendingConnectionClass(prefix, config),
+            readerPendingConnectionQueue, ns, config);
       }
     }
 
@@ -1442,6 +1470,10 @@ public abstract class Server {
     Reader getReader() {
       currentReader = (currentReader + 1) % readers.length;
       return readers[currentReader];
+    }
+
+    Reader[] getReaders() {
+      return readers;
     }
   }
 

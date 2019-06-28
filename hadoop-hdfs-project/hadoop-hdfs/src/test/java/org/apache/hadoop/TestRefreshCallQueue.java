@@ -18,6 +18,7 @@
 
 package org.apache.hadoop;
 
+import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_READERQUEUE_IMPL_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -48,6 +49,8 @@ public class TestRefreshCallQueue {
   private Configuration config;
   static int mockQueueConstructions;
   static int mockQueuePuts;
+  static int mockReaderConstructions;
+  static int mockReaderPuts;
   private int nnPort = 0;
 
   private void setUp(Class<?> queueClass) throws IOException {
@@ -59,6 +62,10 @@ public class TestRefreshCallQueue {
       config = new Configuration();
       String callQueueConfigKey = "ipc." + nnPort + ".callqueue.impl";
       config.setClass(callQueueConfigKey, queueClass, BlockingQueue.class);
+      String readerQueueConfigKey =
+          "ipc." + nnPort + "." + IPC_READERQUEUE_IMPL_KEY;
+      config.setClass(readerQueueConfigKey, MockReaderQueue.class,
+          BlockingQueue.class);
       config.set("hadoop.security.authorization", "true");
 
       FileSystem.setDefaultUri(config, "hdfs://localhost:" + nnPort);
@@ -95,6 +102,18 @@ public class TestRefreshCallQueue {
     public void put(E e) throws InterruptedException {
       super.put(e);
       mockQueuePuts++;
+    }
+  }
+
+  public static class MockReaderQueue<E> extends LinkedBlockingQueue<E> {
+    public MockReaderQueue(int cap, String ns, Configuration conf) {
+      super(cap);
+      mockReaderConstructions++;
+    }
+
+    public void put(E e) throws InterruptedException {
+      super.put(e);
+      mockReaderPuts++;
     }
   }
 
@@ -172,5 +191,27 @@ public class TestRefreshCallQueue {
     assertEquals(150 * serviceHandlerCount, rpcServer.getClientRpcServer()
         .getMaxQueueSize());
  }
+
+  @Test
+  public void testRefreshReaderQueue() throws Exception {
+    assertTrue("Mock reader queue should have been constructed",
+        mockReaderConstructions > 0);
+    assertTrue("Puts are routed through MockReaderQueue", canPutInMockQueue());
+    int lastMockQueueConstructions = mockReaderConstructions;
+
+    // Replace queue with the default, which would be the LinkedBlockingQueue
+    DFSAdmin admin = new DFSAdmin(config);
+    String[] args = new String[] { "-refreshReaderQueue" };
+    int exitCode = admin.run(args);
+    assertEquals("DFSAdmin should return 0", 0, exitCode);
+
+    assertEquals("Mock reader queue should have no additional constructions",
+        lastMockQueueConstructions, mockReaderConstructions);
+    int putsBefore = mockReaderPuts;
+    FileSystem fs = FileSystem.get(config);
+    fs.exists(new Path("/")); // Make an RPC call
+    assertEquals("Puts are routed through LBQ instead of MockReaderQueue",
+        putsBefore, mockReaderPuts);
+  }
 
 }

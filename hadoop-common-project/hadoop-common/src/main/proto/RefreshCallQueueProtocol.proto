@@ -41,6 +41,18 @@ message RefreshCallQueueResponseProto {
 }
 
 /**
+ *  Refresh readerqueue request.
+ */
+message RefreshReaderQueueRequestProto {
+}
+
+/**
+ * void response.
+ */
+message RefreshReaderQueueResponseProto {
+}
+
+/**
  * Protocol which is used to refresh the callqueue.
  */
 service RefreshCallQueueProtocolService {
@@ -49,4 +61,9 @@ service RefreshCallQueueProtocolService {
    */
   rpc refreshCallQueue(RefreshCallQueueRequestProto)
       returns(RefreshCallQueueResponseProto);
+  /**
+   * Refresh the readerqueue.
+   */
+  rpc refreshReaderQueue (RefreshReaderQueueRequestProto)
+      returns (RefreshReaderQueueResponseProto);
 }

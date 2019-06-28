@@ -45,4 +45,10 @@ public interface RefreshCallQueueProtocol {
    */
   @Idempotent
   void refreshCallQueue() throws IOException;
+  /**
+   * Refresh the readqueue.
+   * @throws IOException
+   */
+  @Idempotent
+  void refreshReaderQueue() throws IOException;
 }

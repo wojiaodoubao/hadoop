@@ -450,6 +450,7 @@ public class DFSAdmin extends FsShell {
     "\t[-refreshUserToGroupsMappings]\n" +
     "\t[-refreshSuperUserGroupsConfiguration]\n" +
     "\t[-refreshCallQueue]\n" +
+    "\t[-refreshReaderQueue]\n" +
     "\t[-refresh <host:ipc_port> <key> [arg1..argn]\n" +
     "\t[-reconfig <namenode|datanode> <host:ipc_port> " +
       "<start|status|properties>]\n" +
@@ -1185,6 +1186,8 @@ public class DFSAdmin extends FsShell {
 
     String refreshCallQueue = "-refreshCallQueue: Reload the call queue from config\n";
 
+    String refreshReaderQueue = "-refreshReaderQueue: Reload the reader queue from config\n";
+
     String reconfig = "-reconfig <namenode|datanode> <host:ipc_port> " +
         "<start|status|properties>:\n" +
         "\tStarts or gets the status of a reconfiguration operation, \n" +
@@ -1316,6 +1319,8 @@ public class DFSAdmin extends FsShell {
       System.out.println(refreshSuperUserGroupsConfiguration);
     } else if ("refreshCallQueue".equals(cmd)) {
       System.out.println(refreshCallQueue);
+    } else if ("refreshReaderQueue".equals(cmd)) {
+      System.out.println(refreshReaderQueue);
     } else if ("refresh".equals(cmd)) {
       System.out.println(genericRefresh);
     } else if ("reconfig".equals(cmd)) {
@@ -1370,6 +1375,7 @@ public class DFSAdmin extends FsShell {
       System.out.println(refreshUserToGroupsMappings);
       System.out.println(refreshSuperUserGroupsConfiguration);
       System.out.println(refreshCallQueue);
+      System.out.println(refreshReaderQueue);
       System.out.println(genericRefresh);
       System.out.println(reconfig);
       System.out.println(printTopology);
@@ -1830,6 +1836,39 @@ public class DFSAdmin extends FsShell {
     return 0;
   }
 
+  public int refreshReaderQueue() throws IOException {
+    Configuration conf = getConf();
+    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_SERVICE_USER_NAME_KEY,
+        conf.get(DFSConfigKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY, ""));
+
+    DistributedFileSystem dfs = getDFS();
+    URI dfsUri = dfs.getUri();
+    boolean isHaEnabled = HAUtilClient.isLogicalUri(conf, dfsUri);
+
+    if (isHaEnabled) {
+      // Run refreshReaderQueue for all NNs if HA is enabled
+      String nsId = dfsUri.getHost();
+      List<ProxyAndInfo<RefreshCallQueueProtocol>> proxies =
+          HAUtil.getProxiesForAllNameNodesInNameservice(conf, nsId,
+              RefreshCallQueueProtocol.class);
+      for (ProxyAndInfo<RefreshCallQueueProtocol> proxy : proxies) {
+        proxy.getProxy().refreshReaderQueue();
+        System.out.println("Refresh reader queue successful for "
+            + proxy.getAddress());
+      }
+    } else {
+      // Create the client
+      RefreshCallQueueProtocol refreshProtocol =
+          NameNodeProxies.createProxy(conf, FileSystem.getDefaultUri(conf),
+              RefreshCallQueueProtocol.class).getProxy();
+
+      // Refresh the call queue
+      refreshProtocol.refreshReaderQueue();
+      System.out.println("Refresh reader queue successful");
+    }
+    return 0;
+  }
+
   public int reconfig(String[] argv, int i) throws IOException {
     String nodeType = argv[i];
     String address = argv[i + 1];
@@ -2136,6 +2175,9 @@ public class DFSAdmin extends FsShell {
     } else if ("-refreshCallQueue".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
                          + " [-refreshCallQueue]");
+    } else if ("-refreshReaderQueue".equals(cmd)) {
+      System.err.println("Usage: hdfs dfsadmin"
+                         + " [-refreshReaderQueue]");
     } else if ("-reconfig".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
           + " [-reconfig <namenode|datanode> <host:ipc_port> "
@@ -2391,6 +2433,8 @@ public class DFSAdmin extends FsShell {
         exitCode = refreshSuperUserGroupsConfiguration();
       } else if ("-refreshCallQueue".equals(cmd)) {
         exitCode = refreshCallQueue();
+      } else if ("-refreshReaderQueue".equals(cmd)) {
+        exitCode = refreshReaderQueue();
       } else if ("-refresh".equals(cmd)) {
         exitCode = genericRefresh(argv, i);
       } else if ("-printTopology".equals(cmd)) {

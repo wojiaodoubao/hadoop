@@ -23,6 +23,8 @@ import java.io.IOException;
 import org.apache.hadoop.ipc.RefreshCallQueueProtocol;
 import org.apache.hadoop.ipc.proto.RefreshCallQueueProtocolProtos.RefreshCallQueueRequestProto;
 import org.apache.hadoop.ipc.proto.RefreshCallQueueProtocolProtos.RefreshCallQueueResponseProto;
+import org.apache.hadoop.ipc.proto.RefreshCallQueueProtocolProtos.RefreshReaderQueueRequestProto;
+import org.apache.hadoop.ipc.proto.RefreshCallQueueProtocolProtos.RefreshReaderQueueResponseProto;
 
 import com.google.protobuf.RpcController;
 import com.google.protobuf.ServiceException;
@@ -34,6 +36,9 @@ public class RefreshCallQueueProtocolServerSideTranslatorPB implements
 
   private final static RefreshCallQueueResponseProto
   VOID_REFRESH_CALL_QUEUE_RESPONSE = RefreshCallQueueResponseProto
+      .newBuilder().build();
+  private final static RefreshReaderQueueResponseProto
+  VOID_REFRESH_READER_QUEUE_RESPONE = RefreshReaderQueueResponseProto
       .newBuilder().build();
 
   public RefreshCallQueueProtocolServerSideTranslatorPB(
@@ -51,5 +56,18 @@ public class RefreshCallQueueProtocolServerSideTranslatorPB implements
       throw new ServiceException(e);
     }
     return VOID_REFRESH_CALL_QUEUE_RESPONSE;
+  }
+
+  @Override
+  public RefreshReaderQueueResponseProto refreshReaderQueue(
+      RpcController controller,
+      RefreshReaderQueueRequestProto request)
+      throws ServiceException {
+    try {
+      impl.refreshReaderQueue();
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
+    return VOID_REFRESH_READER_QUEUE_RESPONE;
   }
 }
