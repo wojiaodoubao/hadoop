@@ -37,29 +37,24 @@ public class QuotaCounts {
    * and tsCounts are set to the 4 most common used value, we just point them to
    * the pre-defined const EnumCounters objects instead of constructing many
    * objects with the same value. See HDFS-14547.
-   * The 4 EnumCounters objects are:
-   * EnumCounters<Quota> filled with all 0.
-   * EnumCounters<Quota> filled with all -1.
-   * EnumCounters<StorageType> filled with all 0.
-   * EnumCounters<StorageType> filled with all -1.
-   * */
+   */
   final static EnumCounters<Quota> QUOTA_RESET =
-      new ConstEnumCounters<Quota>(Quota.class, HdfsConstants.QUOTA_RESET);
+      new ConstEnumCounters<>(Quota.class, HdfsConstants.QUOTA_RESET);
   final static EnumCounters<Quota> QUOTA_DEFAULT =
-      new ConstEnumCounters<Quota>(Quota.class, 0);
+      new ConstEnumCounters<>(Quota.class, 0);
   final static EnumCounters<StorageType> STORAGE_TYPE_RESET =
-      new ConstEnumCounters<StorageType>(StorageType.class, HdfsConstants.QUOTA_RESET);
+      new ConstEnumCounters<>(StorageType.class, HdfsConstants.QUOTA_RESET);
   final static EnumCounters<StorageType> STORAGE_TYPE_DEFAULT =
-      new ConstEnumCounters<StorageType>(StorageType.class, 0);
+      new ConstEnumCounters<>(StorageType.class, 0);
 
   /**
    * Modify counter with action. If the counter is ConstEnumCounters, copy all
    * the values of it to a new EnumCounters object, and modify the new obj.
    *
    * @param counter the EnumCounters to be modified.
-   * @param action the modifying action on ec.
+   * @param action the modifying action on counter.
    * @return the modified counter.
-   * */
+   */
   static <T extends Enum<T>> EnumCounters<T> modify(EnumCounters<T> counter,
       Consumer<EnumCounters<T>> action) {
     try {
@@ -156,8 +151,8 @@ public class QuotaCounts {
   }
 
   public QuotaCounts subtract(QuotaCounts that) {
-    nsSsCounts = modify(nsSsCounts, ec->ec.subtract(that.nsSsCounts));
-    tsCounts = modify(tsCounts, ec->ec.subtract(that.tsCounts));
+    nsSsCounts = modify(nsSsCounts, ec -> ec.subtract(that.nsSsCounts));
+    tsCounts = modify(tsCounts, ec -> ec.subtract(that.tsCounts));
     return this;
   }
 
@@ -184,7 +179,7 @@ public class QuotaCounts {
   }
 
   public void addNameSpace(long nsDelta) {
-    nsSsCounts = modify(nsSsCounts, ec->ec.add(Quota.NAMESPACE, nsDelta));
+    nsSsCounts = modify(nsSsCounts, ec -> ec.add(Quota.NAMESPACE, nsDelta));
   }
 
   public long getStorageSpace(){
@@ -198,7 +193,7 @@ public class QuotaCounts {
   }
 
   public void addStorageSpace(long dsDelta) {
-    nsSsCounts = modify(nsSsCounts, ec->ec.add(Quota.STORAGESPACE, dsDelta));
+    nsSsCounts = modify(nsSsCounts, ec -> ec.add(Quota.STORAGESPACE, dsDelta));
   }
 
   public EnumCounters<StorageType> getTypeSpaces() {
@@ -209,13 +204,9 @@ public class QuotaCounts {
   }
 
   void setTypeSpaces(EnumCounters<StorageType> that) {
-    if (that == null) {
-      return;
-    } else if (that == STORAGE_TYPE_DEFAULT) {
-      tsCounts = STORAGE_TYPE_DEFAULT;
-    } else if (that == STORAGE_TYPE_RESET) {
-      tsCounts = STORAGE_TYPE_RESET;
-    } else {
+    if (that == STORAGE_TYPE_DEFAULT || that == STORAGE_TYPE_RESET) {
+      tsCounts = that;
+    } else if (that != null) {
       tsCounts = modify(tsCounts, ec -> ec.set(that));
     }
   }
@@ -225,11 +216,11 @@ public class QuotaCounts {
   }
 
   void setTypeSpace(StorageType type, long spaceCount) {
-    tsCounts = modify(tsCounts, ec->ec.set(type, spaceCount));
+    tsCounts = modify(tsCounts, ec -> ec.set(type, spaceCount));
   }
 
   public void addTypeSpace(StorageType type, long delta) {
-    tsCounts = modify(tsCounts, ec->ec.add(type, delta));
+    tsCounts = modify(tsCounts, ec -> ec.add(type, delta));
   }
 
   public boolean anyNsSsCountGreaterOrEqual(long val) {
@@ -250,6 +241,16 @@ public class QuotaCounts {
     return tsCounts.anyGreaterOrEqual(val);
   }
 
+  /**
+   * Set inputCounts' value of Quota type quotaToSet to val.
+   * inputCounts should be the left side value of this method.
+   *
+   * @param inputCounts the EnumCounters instance.
+   * @param quotaToSet the quota type to be set.
+   * @param otherQuota the other quota type besides quotaToSet.
+   * @param val the value to be set.
+   * @return the modified inputCounts.
+   */
   private static EnumCounters<Quota> setQuotaCounter(
       EnumCounters<Quota> inputCounts, Quota quotaToSet, Quota otherQuota,
       long val) {
@@ -259,7 +260,7 @@ public class QuotaCounts {
     } else if (val == 0 && inputCounts.get(otherQuota) == 0) {
       return QUOTA_DEFAULT;
     } else {
-      return modify(inputCounts, ec->ec.set(quotaToSet, val));
+      return modify(inputCounts, ec -> ec.set(quotaToSet, val));
     }
   }
 

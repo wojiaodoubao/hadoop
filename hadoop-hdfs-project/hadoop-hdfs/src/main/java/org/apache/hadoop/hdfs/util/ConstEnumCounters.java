@@ -22,14 +22,15 @@ package org.apache.hadoop.hdfs.util;
  *
  * It's the const version of EnumCounters. Any modification ends with a
  * ConstEnumException.
- * See {@see EnumCounters}
+ *
+ * @see org.apache.hadoop.hdfs.util.EnumCounters
  */
 public class ConstEnumCounters<E extends Enum<E>> extends EnumCounters<E> {
 
   /**
    * An exception class for modification on ConstEnumCounters.
-   * */
-  public static class ConstEnumException extends RuntimeException {
+   */
+  public static final class ConstEnumException extends RuntimeException {
     private ConstEnumException(String msg) {
       super(msg);
     }
@@ -37,7 +38,7 @@ public class ConstEnumCounters<E extends Enum<E>> extends EnumCounters<E> {
 
   /**
    * Throwing this exception if any modification occurs.
-   * */
+   */
   private static final ConstEnumException CONST_ENUM_EXCEPTION =
       new ConstEnumException("modification on const.");
 

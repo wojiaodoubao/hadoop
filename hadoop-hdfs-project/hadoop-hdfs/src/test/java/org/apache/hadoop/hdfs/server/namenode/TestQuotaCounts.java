@@ -26,7 +26,7 @@ import static org.junit.Assert.assertSame;
 
 /**
  * Test QuotaCounts.
- * */
+ */
 public class TestQuotaCounts {
   @Test
   public void testBuildConstEnumCounters() throws Exception {

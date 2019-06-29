@@ -140,9 +140,9 @@ public class EnumCounters<E extends Enum<E>> {
 
   /**
    * Return a deep copy of EnumCounter.
-   * */
+   */
   public EnumCounters<E> deepCopyEnumCounter() {
-    EnumCounters<E> newCounter = new EnumCounters(enumClass);
+    EnumCounters<E> newCounter = new EnumCounters<>(enumClass);
     newCounter.set(this);
     return newCounter;
   }
@@ -185,14 +185,5 @@ public class EnumCounters<E extends Enum<E>> {
       }
     }
     return false;
-  }
-
-  public boolean allEqual(long val) {
-    for (long c: counters) {
-      if (c != val) {
-        return false;
-      }
-    }
-    return true;
   }
 }
