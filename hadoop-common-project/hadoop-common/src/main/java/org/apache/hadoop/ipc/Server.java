@@ -678,7 +678,7 @@ public abstract class Server {
       String prefix, Configuration conf) {
     String k = prefix + "." + CommonConfigurationKeys.IPC_READERQUEUE_IMPL_KEY;
     Class<?> pendingClass = conf.getClass(k, LinkedBlockingQueue.class);
-    return CallQueueManager.convertQueueClass(pendingClass, Connection.class);
+    return SwapQueueManager.convertQueueClass(pendingClass, Connection.class);
    }
 
   private String getQueueClassPrefix() {
@@ -689,7 +689,7 @@ public abstract class Server {
       String prefix, Configuration conf) {
     String name = prefix + "." + CommonConfigurationKeys.IPC_CALLQUEUE_IMPL_KEY;
     Class<?> queueClass = conf.getClass(name, LinkedBlockingQueue.class);
-    return CallQueueManager.convertQueueClass(queueClass, Call.class);
+    return SwapQueueManager.convertQueueClass(queueClass, Call.class);
   }
 
   static Class<? extends RpcScheduler> getSchedulerClass(
@@ -1233,9 +1233,9 @@ public abstract class Server {
         super(name);
         this.num = num;
         final String prefix = getQueueClassPrefix();
-        this.pendingConnections = new SwapQueueManager<Connection>(
-            getPendingConnectionClass(prefix, conf),
-            readerPendingConnectionQueue, "reader-" + num, conf);
+        this.pendingConnections = new SwapQueueManager<>(SwapQueueManager
+            .createQueueInstance(getPendingConnectionClass(prefix, conf),
+                readerPendingConnectionQueue, "reader-" + num, conf));
         this.readSelector = Selector.open();
       }
       

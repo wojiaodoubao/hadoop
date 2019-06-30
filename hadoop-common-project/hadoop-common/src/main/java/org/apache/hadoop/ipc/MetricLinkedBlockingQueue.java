@@ -159,7 +159,7 @@ public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
   private static final class MetricsProxy implements MetricLinkedBlockingQueueMXBean {
     // One singleton per namespace
     private static final HashMap<String, MetricsProxy> INSTANCES =
-        new HashMap<String, MetricsProxy>();
+        new HashMap<>();
 
     // Weakref for delegate, so we don't retain it forever if it can be GC'd
     private WeakReference<MetricLinkedBlockingQueue> delegate;
@@ -180,7 +180,7 @@ public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
     }
 
     public void setDelegate(MetricLinkedBlockingQueue obj) {
-      this.delegate = new WeakReference<MetricLinkedBlockingQueue>(obj);
+      this.delegate = new WeakReference<>(obj);
       this.revisionNumber++;
     }
 

@@ -8,11 +8,15 @@ import java.util.Iterator;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+
 import org.apache.hadoop.conf.Configuration;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Abstracts queue operations for different blocking queues.
+ */
 public class SwapQueueManager<E> extends AbstractQueue<E>
     implements BlockingQueue<E> {
   public static final Logger LOG =
@@ -30,21 +34,28 @@ public class SwapQueueManager<E> extends AbstractQueue<E>
 
   // Atomic refs point to active callQueue
   // We have two so we can better control swapping
-  private final AtomicReference<BlockingQueue<E>> putRef;
-  private final AtomicReference<BlockingQueue<E>> takeRef;
+  final AtomicReference<BlockingQueue<E>> putRef;
+  final AtomicReference<BlockingQueue<E>> takeRef;
 
   public SwapQueueManager(Class<? extends BlockingQueue<E>> backingClass,
       int maxQueueSize, String namespace, Configuration conf) {
-    BlockingQueue<E> bq = createSwapQueueInstance(backingClass,
+    BlockingQueue<E> bq = createQueueInstance(backingClass,
         maxQueueSize, namespace, conf);
-    this.putRef = new AtomicReference<BlockingQueue<E>>(bq);
-    this.takeRef = new AtomicReference<BlockingQueue<E>>(bq);
+    this.putRef = new AtomicReference<>(bq);
+    this.takeRef = new AtomicReference<>(bq);
     LOG.info("Using swapQueue: {}, queueCapacity: {}.", backingClass,
         maxQueueSize);
   }
 
-  private <T extends BlockingQueue<E>> T createSwapQueueInstance(
-      Class<T> theClass, int maxLen, String ns, Configuration conf) {
+  SwapQueueManager(BlockingQueue<E> queue) {
+    this.putRef = new AtomicReference<>(queue);
+    this.takeRef = new AtomicReference<>(queue);
+    LOG.info("Using swapQueue: {}, queueCapacity: {}.", queue.getClass(),
+        queue.size());
+  }
+
+  static <T extends BlockingQueue> T createQueueInstance(Class<T> theClass,
+      int maxLen, String ns, Configuration conf) {
     // Used for custom, configurable callqueues
     try {
       Constructor<T> ctor = theClass
@@ -97,6 +108,11 @@ public class SwapQueueManager<E> extends AbstractQueue<E>
     return putRef.get().add(e);
   }
 
+  /**
+   * Insert e into the queue.
+   * Return true if e is queued.
+   * Return false if the queue is full.
+   */
   @Override
   public boolean offer(E e) {
     return putRef.get().offer(e);
@@ -155,7 +171,7 @@ public class SwapQueueManager<E> extends AbstractQueue<E>
       Class<? extends BlockingQueue<E>> queueClassToUse, int maxSize,
       String ns, Configuration conf) {
     BlockingQueue<E> newQ =
-        createSwapQueueInstance(queueClassToUse, maxSize, ns, conf);
+        createQueueInstance(queueClassToUse, maxSize, ns, conf);
 
     // Our current queue becomes the old queue
     BlockingQueue<E> oldQ = putRef.get();

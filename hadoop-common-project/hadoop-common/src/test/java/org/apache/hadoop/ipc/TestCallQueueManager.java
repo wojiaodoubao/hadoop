@@ -171,7 +171,7 @@ public class TestCallQueueManager {
 
 
   private static final Class<? extends BlockingQueue<FakeCall>> queueClass
-      = CallQueueManager.convertQueueClass(LinkedBlockingQueue.class, FakeCall.class);
+      = SwapQueueManager.convertQueueClass(LinkedBlockingQueue.class, FakeCall.class);
 
   private static final Class<? extends RpcScheduler> schedulerClass
       = CallQueueManager.convertSchedulerClass(DefaultRpcScheduler.class);
@@ -196,7 +196,7 @@ public class TestCallQueueManager {
       String prefix, Configuration conf) {
     String name = prefix + "." + CommonConfigurationKeys.IPC_CALLQUEUE_IMPL_KEY;
     Class<?> queueClass = conf.getClass(name, LinkedBlockingQueue.class);
-    return CallQueueManager.convertQueueClass(queueClass, FakeCall.class);
+    return SwapQueueManager.convertQueueClass(queueClass, FakeCall.class);
   }
 
   @Test
@@ -348,7 +348,7 @@ public class TestCallQueueManager {
       ExceptionFakeScheduler.class);
 
   private static final Class<? extends BlockingQueue<ExceptionFakeCall>>
-      exceptionQueueClass = CallQueueManager.convertQueueClass(
+      exceptionQueueClass = SwapQueueManager.convertQueueClass(
       ExceptionFakeCall.class, ExceptionFakeCall.class);
 
   @Test
