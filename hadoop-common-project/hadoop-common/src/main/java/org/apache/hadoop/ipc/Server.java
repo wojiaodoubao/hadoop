@@ -1320,9 +1320,9 @@ public abstract class Server {
       void refreshPendingConnections(Configuration config) {
         final String prefix = getQueueClassPrefix();
         String ns = "reader-" + num;
-        pendingConnections.swapQueue(getSchedulerClass(prefix, conf),
-            getPendingConnectionClass(prefix, config),
-            readerPendingConnectionQueue, ns, config);
+        pendingConnections.swapQueue(SwapQueueManager
+            .createQueueInstance(getPendingConnectionClass(prefix, config),
+                readerPendingConnectionQueue, ns, config));
       }
     }
 

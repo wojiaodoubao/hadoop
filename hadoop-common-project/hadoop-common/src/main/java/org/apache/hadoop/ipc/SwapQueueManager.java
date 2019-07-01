@@ -166,13 +166,7 @@ public class SwapQueueManager<E> extends AbstractQueue<E>
    * Replaces active queue with the newly requested one and transfers
    * all calls to the newQ before returning.
    */
-  public synchronized void swapQueue(
-      Class<? extends RpcScheduler> schedulerClass,
-      Class<? extends BlockingQueue<E>> queueClassToUse, int maxSize,
-      String ns, Configuration conf) {
-    BlockingQueue<E> newQ =
-        createQueueInstance(queueClassToUse, maxSize, ns, conf);
-
+  public synchronized void swapQueue(BlockingQueue<E> newQ) {
     // Our current queue becomes the old queue
     BlockingQueue<E> oldQ = putRef.get();
 

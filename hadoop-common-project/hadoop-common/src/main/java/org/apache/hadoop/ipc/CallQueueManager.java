@@ -231,6 +231,34 @@ public class CallQueueManager<E extends Schedulable>
     return retval;
   }
 
+  /**
+   * Replaces active queue with the newly requested one and transfers
+   * all calls to the newQ before returning.
+   */
+  public synchronized void swapQueue(
+      Class<? extends RpcScheduler> schedulerClass,
+      Class<? extends BlockingQueue<E>> queueClassToUse, int maxSize, String ns,
+      Configuration conf) {
+    int priorityLevels = parseNumLevels(ns, conf);
+    this.scheduler.stop();
+    RpcScheduler newScheduler =
+        createScheduler(schedulerClass, priorityLevels, ns, conf);
+    BlockingQueue<E> newQ = createQueueInstance(queueClassToUse,
+        priorityLevels, maxSize, ns, conf);
+    super.swapQueue(newQ);
+    this.scheduler = newScheduler;
+  }
+
+  /**
+   * Never call this method.
+   */
+  @Override
+  public synchronized void swapQueue(BlockingQueue<E> newQ) {
+    LOG.warn("Call swapQueue(Class<? extends RpcScheduler> schedulerClass,"
+        + " Class<? extends BlockingQueue<E>> queueClassToUse, int maxSize,"
+        + " String ns, Configuration conf) instead.");
+  }
+
   // exception that mimics the standard ISE thrown by blocking queues but
   // embeds a rpc server exception for the client to retry and indicate
   // if the client should be disconnected.

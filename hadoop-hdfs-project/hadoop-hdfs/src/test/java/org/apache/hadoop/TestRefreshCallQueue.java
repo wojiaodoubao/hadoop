@@ -44,6 +44,9 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.junit.After;
 import org.junit.Test;
 
+/**
+ * Test refresh CallQueue and ReaderQueue.
+ */
 public class TestRefreshCallQueue {
   private MiniDFSCluster cluster;
   private Configuration config;
@@ -53,7 +56,7 @@ public class TestRefreshCallQueue {
   static int mockReaderPuts;
   private int nnPort = 0;
 
-  private void setUp(Class<?> queueClass) throws IOException {
+  private void setUp(Class<?> callQueueClass, Class<?> readerQueueClass) throws IOException {
     int portRetries = 5;
     Random rand = new Random();
     for (; portRetries > 0; --portRetries) {
@@ -61,10 +64,10 @@ public class TestRefreshCallQueue {
       nnPort = 30000 + rand.nextInt(30000);
       config = new Configuration();
       String callQueueConfigKey = "ipc." + nnPort + ".callqueue.impl";
-      config.setClass(callQueueConfigKey, queueClass, BlockingQueue.class);
+      config.setClass(callQueueConfigKey, callQueueClass, BlockingQueue.class);
       String readerQueueConfigKey =
           "ipc." + nnPort + "." + IPC_READERQUEUE_IMPL_KEY;
-      config.setClass(readerQueueConfigKey, MockReaderQueue.class,
+      config.setClass(readerQueueConfigKey, readerQueueClass,
           BlockingQueue.class);
       config.set("hadoop.security.authorization", "true");
 
@@ -131,7 +134,7 @@ public class TestRefreshCallQueue {
     // We want to count additional events, so we reset here
     mockQueueConstructions = 0;
     mockQueuePuts = 0;
-    setUp(MockCallQueue.class);
+    setUp(MockCallQueue.class, LinkedBlockingQueue.class);
 
     assertTrue("Mock queue should have been constructed",
         mockQueueConstructions > 0);
@@ -157,7 +160,7 @@ public class TestRefreshCallQueue {
 
   @Test
   public void testRefreshCallQueueWithFairCallQueue() throws Exception {
-    setUp(FairCallQueue.class);
+    setUp(FairCallQueue.class, LinkedBlockingQueue.class);
     boolean oldValue = DefaultMetricsSystem.inMiniClusterMode();
 
     // throw an error when we double-initialize JvmMetrics
@@ -194,9 +197,9 @@ public class TestRefreshCallQueue {
 
   @Test
   public void testRefreshReaderQueue() throws Exception {
+    setUp(LinkedBlockingQueue.class, MockReaderQueue.class);
     assertTrue("Mock reader queue should have been constructed",
         mockReaderConstructions > 0);
-    assertTrue("Puts are routed through MockReaderQueue", canPutInMockQueue());
     int lastMockQueueConstructions = mockReaderConstructions;
 
     // Replace queue with the default, which would be the LinkedBlockingQueue
