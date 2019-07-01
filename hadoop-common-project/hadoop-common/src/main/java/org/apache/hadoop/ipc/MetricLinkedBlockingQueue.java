@@ -32,6 +32,10 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_METRIC_BLOCKING_Q
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_METRIC_BLOCKING_QUEUE_LOG_THRESHOLD;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_METRIC_BLOCKING_QUEUE_LOG_THRESHOLD_DEFAULT;
 
+/**
+ * Compute qps and write log when the queue is full. It's used to monitor the
+ * rpc queues(Reader queue and Call queue).
+ */
 public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
   final private long interval;
   enum OP {
@@ -154,7 +158,8 @@ public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
 
   /**
    * MetricsProxy is a singleton because we may init multiple
-   * FairCallQueues, but the metrics system cannot unregister beans cleanly.
+   * MetricLinkedBlockingQueues, but the metrics system cannot unregister beans
+   * cleanly.
    */
   private static final class MetricsProxy implements MetricLinkedBlockingQueueMXBean {
     // One singleton per namespace

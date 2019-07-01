@@ -67,7 +67,8 @@ public class RefreshCallQueueProtocolClientSideTranslatorPB implements
     }
   }
 
-  @Override public void refreshReaderQueue() throws IOException {
+  @Override
+  public void refreshReaderQueue() throws IOException {
     try {
       rpcProxy.refreshReaderQueue(NULL_CONTROLLER,
           VOID_REFRESH_READER_QUEUE_REQUEST);

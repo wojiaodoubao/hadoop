@@ -732,7 +732,7 @@ public abstract class Server {
   }
 
   /*
-   * Refresh the call queue
+   * Refresh the reader queue
    */
   public synchronized void refreshReaderQueue(Configuration conf) {
     Listener.Reader[] readers = listener.getReaders();

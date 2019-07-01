@@ -128,10 +128,13 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String IO_COMPRESSION_CODECS_KEY = "io.compression.codecs";
 
   /**
-   * ReaderQueue related settings.
-   * */
+   * ReaderQueue related settings
+   */
   public static final String IPC_READERQUEUE_IMPL_KEY = "readerqueue.impl";
 
+  /**
+   * MetricLinkedBlockingQueue settings
+   */
   public static final String IPC_METRIC_BLOCKING_QUEUE_INTERVAL =
       "ipc.metric.blocking.queue.interval";
   public static final long IPC_METRIC_BLOCKING_QUEUE_INTERVAL_DEFAULT =
