@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.datanode;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SCAN_PERIOD_HOURS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_SCANNER_VOLUME_BYTES_PER_SECOND;
+import static org.apache.hadoop.hdfs.protocol.Block.BLOCK_FILE_PREFIX;
 import static org.apache.hadoop.hdfs.server.datanode.BlockScanner.Conf.INTERNAL_DFS_DATANODE_SCAN_PERIOD_MS;
 import static org.apache.hadoop.hdfs.server.datanode.BlockScanner.Conf.INTERNAL_VOLUME_SCANNER_SCAN_RESULT_HANDLER;
 import static org.apache.hadoop.hdfs.server.datanode.BlockScanner.Conf.INTERNAL_DFS_BLOCK_SCANNER_CURSOR_SAVE_INTERVAL_MS;
@@ -44,6 +45,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hdfs.AppendTestUtil;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.hdfs.server.datanode.FsDatasetTestUtils.MaterializedReplica;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
 import org.apache.hadoop.hdfs.server.datanode.VolumeScanner.ScanResultHandler;
@@ -943,6 +945,52 @@ public class TestBlockScanner {
 
     GenericTestUtils.setLogLevel(DataNode.LOG, Level.INFO);
     ctx.close();
+  }
+
+  private static final String BASE_PATH =
+      (new File("/data/current/finalized")).getAbsolutePath();
+  private static final String SEP = System.getProperty("file.separator");
+
+  @Test
+  public void testLocalReplicaParsing() throws Exception {
+    long blkId = 7600037L;
+
+    File blockDir = DatanodeUtil.idToBlockDir(new File(BASE_PATH), blkId);
+    String subdir2 = blockDir.getName();
+    String subdir1 = new File(blockDir.getParent()).getName();
+    assertEquals(BASE_PATH,
+        LocalReplica.parseBaseDir(new File(BASE_PATH), blkId).baseDirPath);
+    assertEquals(BASE_PATH + SEP + subdir1, LocalReplica
+        .parseBaseDir(new File(BASE_PATH + SEP + subdir1), blkId).baseDirPath);
+    assertEquals(BASE_PATH + SEP + subdir1 + SEP + "subdir15", LocalReplica
+        .parseBaseDir(new File(BASE_PATH + SEP + subdir1 + SEP + "subdir15"),
+            blkId).baseDirPath);
+    assertEquals(BASE_PATH, LocalReplica
+        .parseBaseDir(new File(BASE_PATH + SEP + subdir1 + SEP + subdir2),
+            blkId).baseDirPath);
+  }
+
+  @Test
+  public void testLocalReplicaUpdateWithReplica() throws Exception {
+    long blkId = 7600037L;
+    File blockDir = DatanodeUtil.idToBlockDir(new File(BASE_PATH), blkId);
+    String subdir2 = blockDir.getName();
+    String subdir1 = new File(blockDir.getParent()).getName();
+    String diskSub = subdir2.equals("subdir0") ? "subdir1" : "subdir0";
+
+    // the block file on disk
+    File diskBlockDir = new File(BASE_PATH + SEP + subdir1 + SEP + diskSub);
+    File realBlkFile = new File(diskBlockDir, BLOCK_FILE_PREFIX + blkId);
+    // the block file in mem
+    File memBlockDir = blockDir;
+    LocalReplica localReplica = (LocalReplica) new ReplicaBuilder(
+        HdfsServerConstants.ReplicaState.FINALIZED)
+        .setDirectoryToUse(memBlockDir).setBlockId(blkId).build();
+
+    // DirectoryScanner find the inconsistent file and try to make it right
+    StorageLocation sl = StorageLocation.parse(realBlkFile.toString());
+    localReplica.updateWithReplica(sl);
+    assertEquals(realBlkFile, localReplica.getBlockFile());
   }
 
   private void waitForRescan(final TestScanResultHandler.Info info,
