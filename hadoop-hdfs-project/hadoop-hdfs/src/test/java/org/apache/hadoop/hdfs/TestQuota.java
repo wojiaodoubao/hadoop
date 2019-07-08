@@ -32,6 +32,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.security.PrivilegedAction;
 import java.security.PrivilegedExceptionAction;
 import java.util.List;
 import java.util.Scanner;
@@ -44,6 +45,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.QuotaUsage;
 import org.apache.hadoop.fs.StorageType;
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.client.impl.LeaseRenewer;
 import org.apache.hadoop.hdfs.protocol.DSQuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
@@ -1576,6 +1578,68 @@ public class TestQuota {
     args = new String[] {"-clrQuota", "/"};
     runCommand(admin, args, false);
     assertEquals(orignalQuota, dfs.getQuotaUsage(new Path("/")).getQuota());
+  }
+
+  @Test
+  public void testSetStoragePolicyAsNormalUser() throws Exception {
+    final Path parent = new Path(PathUtils.getTestDir(getClass()).getPath(),
+        GenericTestUtils.getMethodName());
+    assertTrue(dfs.mkdirs(parent));
+    final Path quotaDir20 = new Path(parent, "nqdir0/qdir1/qdir20");
+
+    assertTrue(dfs.mkdirs(quotaDir20));
+    dfs.setPermission(quotaDir20, FsPermission.createImmutable((short) 000));
+
+    UserGroupInformation ugi =
+        UserGroupInformation.createRemoteUser("normal-user");
+    ugi.doAs(new PrivilegedAction<Object>() {
+      @Override public Object run() {
+        try {
+          dfs.setStoragePolicy(quotaDir20,
+              HdfsConstants.HOT_STORAGE_POLICY_NAME);
+          // it will success, so everyone with write access can change the policy
+        } catch (Exception e) {
+          Assert.fail("");
+        }
+        return null;
+      }
+    });
+  }
+
+  @Test
+  public void testRename() throws Exception {
+    int fileLen = 1024;
+    short replication = 3;
+
+    final Path parent = new Path(PathUtils.getTestDir(getClass()).getPath(),
+        GenericTestUtils.getMethodName());
+    assertTrue(dfs.mkdirs(parent));
+    final Path quotaDir20 = new Path(parent, "nqdir0/qdir1/qdir20");
+
+    assertTrue(dfs.mkdirs(quotaDir20));
+    dfs.setStoragePolicy(quotaDir20, HdfsConstants.HOT_STORAGE_POLICY_NAME);
+
+    Path file = new Path(quotaDir20, "file1");
+    DFSTestUtil.createFile(dfs, file, fileLen, replication, 0);
+
+    final Path quotaDir = new Path(parent, "nqdir0/qdir1/qdir10");
+    assertTrue(dfs.mkdirs(quotaDir));
+    dfs.setStoragePolicy(quotaDir, HdfsConstants.ALLSSD_STORAGE_POLICY_NAME);
+    dfs.setQuota(quotaDir, 100000, 100000);
+    dfs.setQuotaByStorageType(quotaDir, StorageType.SSD, 10);
+
+    Path dstFile = new Path(quotaDir,"file1");
+    try {
+      dfs.rename(file, dstFile);
+    } catch (QuotaExceededException qe) {
+      // expect QuotaExceedException
+    }
+    QuotaUsage q1 = dfs.getQuotaUsage(quotaDir);
+    ContentSummary cs = dfs.getContentSummary(quotaDir);
+    for (StorageType st : StorageType.values()) {
+      // it will fail here, because the quota and consume is not handled right.
+      assertEquals(q1.getTypeConsumed(st), cs.getTypeConsumed(st));
+    }
   }
 
   @Test
