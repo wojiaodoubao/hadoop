@@ -1186,7 +1186,8 @@ public class DFSAdmin extends FsShell {
 
     String refreshCallQueue = "-refreshCallQueue: Reload the call queue from config\n";
 
-    String refreshReaderQueue = "-refreshReaderQueue: Reload the reader queue from config\n";
+    String refreshReaderQueue =
+        "-refreshReaderQueue: Reload the reader queue from config\n";
 
     String reconfig = "-reconfig <namenode|datanode> <host:ipc_port> " +
         "<start|status|properties>:\n" +

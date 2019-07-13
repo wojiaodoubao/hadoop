@@ -734,10 +734,10 @@ public abstract class Server {
   /*
    * Refresh the reader queue
    */
-  public synchronized void refreshReaderQueue(Configuration conf) {
+  public synchronized void refreshReaderQueue(Configuration config) {
     Listener.Reader[] readers = listener.getReaders();
     for (Listener.Reader r : readers) {
-      r.refreshPendingConnections(conf);
+      r.refreshPendingConnections(config);
     }
   }
 

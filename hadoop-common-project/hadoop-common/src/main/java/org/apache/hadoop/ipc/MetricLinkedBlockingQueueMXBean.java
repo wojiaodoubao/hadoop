@@ -17,11 +17,14 @@
  */
 package org.apache.hadoop.ipc;
 
+/**
+ * The statistical info of MetricLinkedBlockingQueue.
+ */
 public interface MetricLinkedBlockingQueueMXBean {
-  int getLastPutQps();
-  int getLastTakeQps();
-  int getLastPollQps();
-  int getLastPollNotNullQps();
+  int getLastPutPS();
+  int getLastTakePS();
+  int getLastPollPS();
+  int getLastPollNotNullPS();
   int getCurrentTotalPut();
   int getCurrentTotalTake();
   int getCurrentTotalPoll();

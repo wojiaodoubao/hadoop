@@ -39,14 +39,14 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_METRIC_BLOCKING_Q
 public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
   final private long interval;
   enum OP {
-    TAKE,PUT,POLL,POLL_NOT_NULL
+    TAKE, PUT, POLL, POLL_NOT_NULL
   }
   private AtomicInteger[] total;
   private int[] qps;
   private volatile long startTime;
 
   private int logSize;
-  AtomicInteger queueTotal;
+  private AtomicInteger queueTotal;
 
   public MetricLinkedBlockingQueue(int size, String ns, Configuration conf) {
     super(size);
@@ -141,9 +141,9 @@ public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
   }
 
   int updateQps(AtomicInteger ai) {
-    int total = ai.get();
+    int aiTotal = ai.get();
     ai.set(0);
-    return total / (int)(interval / 1000);
+    return aiTotal / (int)(interval / 1000);
   }
 
   public int[] getQps() {
@@ -161,7 +161,8 @@ public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
    * MetricLinkedBlockingQueues, but the metrics system cannot unregister beans
    * cleanly.
    */
-  private static final class MetricsProxy implements MetricLinkedBlockingQueueMXBean {
+  private static final class MetricsProxy
+      implements MetricLinkedBlockingQueueMXBean {
     // One singleton per namespace
     private static final HashMap<String, MetricsProxy> INSTANCES =
         new HashMap<>();
@@ -190,22 +191,22 @@ public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
     }
 
     @Override
-    public int getLastPutQps() {
+    public int getLastPutPS() {
       return getLastQps(OP.PUT);
     }
 
     @Override
-    public int getLastTakeQps() {
+    public int getLastTakePS() {
       return getLastQps(OP.TAKE);
     }
 
     @Override
-    public int getLastPollQps() {
+    public int getLastPollPS() {
       return getLastQps(OP.POLL);
     }
 
     @Override
-    public int getLastPollNotNullQps() {
+    public int getLastPollNotNullPS() {
       return getLastQps(OP.POLL_NOT_NULL);
     }
 

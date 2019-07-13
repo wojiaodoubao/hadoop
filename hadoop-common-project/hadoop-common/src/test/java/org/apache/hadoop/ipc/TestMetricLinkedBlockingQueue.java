@@ -28,9 +28,12 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_METRIC_BLOCKING_Q
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
+/**
+ * Basic tests of MetricLinkedBlockingQueue
+ */
 public class TestMetricLinkedBlockingQueue {
 
-  MetricLinkedBlockingQueue mlbq;
+  private MetricLinkedBlockingQueue mlbq;
 
   @Before
   public void setUp() {

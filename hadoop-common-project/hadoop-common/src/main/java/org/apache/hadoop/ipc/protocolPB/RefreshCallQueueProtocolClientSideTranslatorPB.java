@@ -41,10 +41,10 @@ public class RefreshCallQueueProtocolClientSideTranslatorPB implements
   private final RefreshCallQueueProtocolPB rpcProxy;
   
   private final static RefreshCallQueueRequestProto
-  VOID_REFRESH_CALL_QUEUE_REQUEST =
+      VOID_REFRESH_CALL_QUEUE_REQUEST =
       RefreshCallQueueRequestProto.newBuilder().build();
   private final static RefreshReaderQueueRequestProto
-  VOID_REFRESH_READER_QUEUE_REQUEST =
+      VOID_REFRESH_READER_QUEUE_REQUEST =
       RefreshReaderQueueRequestProto.newBuilder().build();
 
   public RefreshCallQueueProtocolClientSideTranslatorPB(

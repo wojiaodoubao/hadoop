@@ -169,9 +169,9 @@ public class TestCallQueueManager {
     t.interrupt();
   }
 
-
-  private static final Class<? extends BlockingQueue<FakeCall>> queueClass
-      = SwapQueueManager.convertQueueClass(LinkedBlockingQueue.class, FakeCall.class);
+  private static final Class<? extends BlockingQueue<FakeCall>> queueClass =
+      SwapQueueManager.convertQueueClass(
+          LinkedBlockingQueue.class, FakeCall.class);
 
   private static final Class<? extends RpcScheduler> schedulerClass
       = CallQueueManager.convertSchedulerClass(DefaultRpcScheduler.class);
@@ -348,13 +348,13 @@ public class TestCallQueueManager {
       ExceptionFakeScheduler.class);
 
   private static final Class<? extends BlockingQueue<ExceptionFakeCall>>
-      exceptionQueueClass = SwapQueueManager.convertQueueClass(
-      ExceptionFakeCall.class, ExceptionFakeCall.class);
+      exceptionClass = SwapQueueManager
+      .convertQueueClass(ExceptionFakeCall.class, ExceptionFakeCall.class);
 
   @Test
   public void testCallQueueConstructorException() throws InterruptedException {
     try {
-      new CallQueueManager<ExceptionFakeCall>(exceptionQueueClass,
+      new CallQueueManager<ExceptionFakeCall>(exceptionClass,
           schedulerClass, false, 10, "", new Configuration());
       fail();
     } catch (RuntimeException re) {

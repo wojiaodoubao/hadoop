@@ -52,11 +52,12 @@ public class TestRefreshCallQueue {
   private Configuration config;
   static int mockQueueConstructions;
   static int mockQueuePuts;
-  static int mockReaderConstructions;
-  static int mockReaderPuts;
+  private static int mockReaderConstructions;
+  private static int mockReaderPuts;
   private int nnPort = 0;
 
-  private void setUp(Class<?> callQueueClass, Class<?> readerQueueClass) throws IOException {
+  private void setUp(Class<?> callQueueClass, Class<?> readerQueueClass)
+      throws IOException {
     int portRetries = 5;
     Random rand = new Random();
     for (; portRetries > 0; --portRetries) {
@@ -108,6 +109,9 @@ public class TestRefreshCallQueue {
     }
   }
 
+  /**
+   * MockReaderQueue
+   */
   public static class MockReaderQueue<E> extends LinkedBlockingQueue<E> {
     public MockReaderQueue(int cap, String ns, Configuration conf) {
       super(cap);
@@ -204,7 +208,7 @@ public class TestRefreshCallQueue {
 
     // Replace queue with the default, which would be the LinkedBlockingQueue
     DFSAdmin admin = new DFSAdmin(config);
-    String[] args = new String[] { "-refreshReaderQueue" };
+    String[] args = new String[] {"-refreshReaderQueue"};
     int exitCode = admin.run(args);
     assertEquals("DFSAdmin should return 0", 0, exitCode);
 
