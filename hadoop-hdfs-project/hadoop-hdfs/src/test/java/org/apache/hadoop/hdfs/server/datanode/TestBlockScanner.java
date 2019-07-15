@@ -34,6 +34,7 @@ import java.net.URI;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
@@ -951,9 +952,13 @@ public class TestBlockScanner {
       (new File("/data/current/finalized")).getAbsolutePath();
   private static final String SEP = System.getProperty("file.separator");
 
+  /**
+   * Test parsing LocalReplica. We should be able to find the replica's path
+   * even if the replica's dir doesn't match the idToBlockDir.
+   */
   @Test
-  public void testLocalReplicaParsing() throws Exception {
-    long blkId = 7600037L;
+  public void testLocalReplicaParsing() {
+    long blkId = Math.abs(new Random().nextLong());
 
     File blockDir = DatanodeUtil.idToBlockDir(new File(BASE_PATH), blkId);
     String subdir2 = blockDir.getName();

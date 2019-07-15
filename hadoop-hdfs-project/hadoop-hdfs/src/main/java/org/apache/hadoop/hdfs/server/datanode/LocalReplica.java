@@ -174,7 +174,7 @@ abstract public class LocalReplica extends ReplicaInfo {
       // set baseDir to currentDir if it matches id(idToBlockDir).
       File idToBlockDir = DatanodeUtil.idToBlockDir(currentDir, blockId);
       if (idToBlockDir.equals(dir)) {
-        return new ReplicaDirInfo(currentDir.getAbsolutePath(), hasSubdirs);
+        return new ReplicaDirInfo(currentDir.getAbsolutePath(), true);
       }
     }
     return new ReplicaDirInfo(dir.getAbsolutePath(), false);
