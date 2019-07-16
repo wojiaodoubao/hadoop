@@ -107,8 +107,7 @@ public class QuotaCounts {
         } else {
           tsCounts = modify(tsCounts, new ModifyAction<StorageType>() {
             @Override
-            public void accept(EnumCounters<StorageType> counter)
-                throws ConstEnumException {
+            public void accept(EnumCounters<StorageType> counter) {
               counter.set(val);
             }
           });
@@ -125,8 +124,7 @@ public class QuotaCounts {
       } else {
         tsCounts = modify(tsCounts, new ModifyAction<StorageType>() {
           @Override
-          public void accept(EnumCounters<StorageType> counter)
-              throws ConstEnumException {
+          public void accept(EnumCounters<StorageType> counter) {
             counter.reset(val);
           }
         });
@@ -140,8 +138,7 @@ public class QuotaCounts {
       } else {
         nsSsCounts = modify(nsSsCounts, new ModifyAction<Quota>() {
           @Override
-          public void accept(EnumCounters<Quota> counter)
-              throws ConstEnumException {
+          public void accept(EnumCounters<Quota> counter) {
             counter.set(that.nsSsCounts);
           }
         });
@@ -152,8 +149,7 @@ public class QuotaCounts {
       } else {
         tsCounts = modify(tsCounts, new ModifyAction<StorageType>() {
           @Override
-          public void accept(EnumCounters<StorageType> counter)
-              throws ConstEnumException {
+          public void accept(EnumCounters<StorageType> counter) {
             counter.set(that.tsCounts);
           }
         });
@@ -174,15 +170,13 @@ public class QuotaCounts {
   public QuotaCounts add(final QuotaCounts that) {
     nsSsCounts = modify(nsSsCounts, new ModifyAction<Quota>() {
       @Override
-      public void accept(EnumCounters<Quota> counter)
-          throws ConstEnumException {
+      public void accept(EnumCounters<Quota> counter) {
         counter.add(that.nsSsCounts);
       }
     });
     tsCounts = modify(tsCounts, new ModifyAction<StorageType>() {
       @Override
-      public void accept(EnumCounters<StorageType> counter)
-          throws ConstEnumException {
+      public void accept(EnumCounters<StorageType> counter) {
         counter.add(that.tsCounts);
       }
     });
@@ -192,15 +186,13 @@ public class QuotaCounts {
   public QuotaCounts subtract(final QuotaCounts that) {
     nsSsCounts = modify(nsSsCounts, new ModifyAction<Quota>() {
       @Override
-      public void accept(EnumCounters<Quota> counter)
-          throws ConstEnumException {
+      public void accept(EnumCounters<Quota> counter) {
         counter.subtract(that.nsSsCounts);
       }
     });
     tsCounts = modify(tsCounts, new ModifyAction<StorageType>() {
       @Override
-      public void accept(EnumCounters<StorageType> counter)
-          throws ConstEnumException {
+      public void accept(EnumCounters<StorageType> counter) {
         counter.subtract(that.tsCounts);
       }
     });
@@ -216,15 +208,13 @@ public class QuotaCounts {
     QuotaCounts ret = new QuotaCounts.Builder().quotaCount(this).build();
     ret.nsSsCounts = modify(ret.nsSsCounts, new ModifyAction<Quota>() {
       @Override
-      public void accept(EnumCounters<Quota> counter)
-          throws ConstEnumException {
+      public void accept(EnumCounters<Quota> counter) {
         counter.negation();
       }
     });
     ret.tsCounts = modify(ret.tsCounts, new ModifyAction<StorageType>() {
       @Override
-      public void accept(EnumCounters<StorageType> counter)
-          throws ConstEnumException {
+      public void accept(EnumCounters<StorageType> counter) {
         counter.negation();
       }
     });
@@ -244,8 +234,7 @@ public class QuotaCounts {
   public void addNameSpace(final long nsDelta) {
     nsSsCounts = modify(nsSsCounts, new ModifyAction<Quota>() {
       @Override
-      public void accept(EnumCounters<Quota> counter)
-          throws ConstEnumException {
+      public void accept(EnumCounters<Quota> counter) {
         counter.add(Quota.NAMESPACE, nsDelta);
       }
     });
@@ -264,8 +253,7 @@ public class QuotaCounts {
   public void addStorageSpace(final long dsDelta) {
     nsSsCounts = modify(nsSsCounts, new ModifyAction<Quota>() {
       @Override
-      public void accept(EnumCounters<Quota> counter)
-          throws ConstEnumException {
+      public void accept(EnumCounters<Quota> counter) {
         counter.add(Quota.STORAGESPACE, dsDelta);
       }
     });
@@ -284,8 +272,7 @@ public class QuotaCounts {
     } else if (that != null) {
       tsCounts = modify(tsCounts, new ModifyAction<StorageType>() {
         @Override
-        public void accept(EnumCounters<StorageType> counter)
-            throws ConstEnumException {
+        public void accept(EnumCounters<StorageType> counter) {
           counter.set(that);
         }
       });
@@ -299,8 +286,7 @@ public class QuotaCounts {
   void setTypeSpace(final StorageType type, final long spaceCount) {
     tsCounts = modify(tsCounts, new ModifyAction<StorageType>() {
       @Override
-      public void accept(EnumCounters<StorageType> counter)
-          throws ConstEnumException {
+      public void accept(EnumCounters<StorageType> counter) {
         counter.set(type, spaceCount);
       }
     });
@@ -309,8 +295,7 @@ public class QuotaCounts {
   public void addTypeSpace(final StorageType type, final long delta) {
     tsCounts = modify(tsCounts, new ModifyAction<StorageType>() {
       @Override
-      public void accept(EnumCounters<StorageType> counter)
-          throws ConstEnumException {
+      public void accept(EnumCounters<StorageType> counter) {
         counter.add(type, delta);
       }
     });
@@ -355,8 +340,7 @@ public class QuotaCounts {
     } else {
       return modify(inputCounts, new ModifyAction<Quota>() {
         @Override
-        public void accept(EnumCounters<Quota> counter)
-            throws ConstEnumException {
+        public void accept(EnumCounters<Quota> counter) {
           counter.set(quotaToSet, val);
         }
       });
