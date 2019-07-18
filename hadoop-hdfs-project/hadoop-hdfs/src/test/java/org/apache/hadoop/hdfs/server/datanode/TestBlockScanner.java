@@ -948,8 +948,6 @@ public class TestBlockScanner {
     ctx.close();
   }
 
-  private static final String BASE_PATH =
-      (new File("/data/current/finalized")).getAbsolutePath();
   private static final String SEP = System.getProperty("file.separator");
 
   /**
@@ -958,33 +956,50 @@ public class TestBlockScanner {
    */
   @Test
   public void testLocalReplicaParsing() {
-    long blkId = Math.abs(new Random().nextLong());
-
-    File blockDir = DatanodeUtil.idToBlockDir(new File(BASE_PATH), blkId);
-    String subdir2 = blockDir.getName();
+    String baseDir = GenericTestUtils.getRandomizedTempPath();
+    long blkId = getRandomBlockId();
+    File blockDir = DatanodeUtil.idToBlockDir(new File(baseDir), blkId);
     String subdir1 = new File(blockDir.getParent()).getName();
-    assertEquals(BASE_PATH,
-        LocalReplica.parseBaseDir(new File(BASE_PATH), blkId).baseDirPath);
-    assertEquals(BASE_PATH + SEP + subdir1, LocalReplica
-        .parseBaseDir(new File(BASE_PATH + SEP + subdir1), blkId).baseDirPath);
-    assertEquals(BASE_PATH + SEP + subdir1 + SEP + "subdir15", LocalReplica
-        .parseBaseDir(new File(BASE_PATH + SEP + subdir1 + SEP + "subdir15"),
-            blkId).baseDirPath);
-    assertEquals(BASE_PATH, LocalReplica
-        .parseBaseDir(new File(BASE_PATH + SEP + subdir1 + SEP + subdir2),
-            blkId).baseDirPath);
+
+    // test parsing dir without ./subdir/subdir
+    LocalReplica.ReplicaDirInfo info =
+        LocalReplica.parseBaseDir(new File(baseDir), blkId);
+    assertEquals(baseDir, info.baseDirPath);
+    assertEquals(false, info.hasSubidrs);
+
+    // test when path doesn't match the idToBLockDir.
+    String pathWithOneSubdir = baseDir + SEP + subdir1;
+    info = LocalReplica.parseBaseDir(new File(pathWithOneSubdir), blkId);
+    assertEquals(pathWithOneSubdir, info.baseDirPath);
+    assertEquals(false, info.hasSubidrs);
+
+    // test when path doesn't match the idToBlockDir.
+    String badPath = baseDir + SEP + subdir1 + SEP + "subdir-not-exist";
+    info = LocalReplica.parseBaseDir(new File(badPath), blkId);
+    assertEquals(badPath, info.baseDirPath);
+    assertEquals(false, info.hasSubidrs);
+
+    // test when path matches the idToBlockDir.
+    info = LocalReplica.parseBaseDir(blockDir, blkId);
+    assertEquals(baseDir, info.baseDirPath);
+    assertEquals(true, info.hasSubidrs);
   }
 
+  /**
+   * Test whether can LocalReplica.updateWithReplica() correct the wrongly
+   * recorded replica location.
+   */
   @Test
   public void testLocalReplicaUpdateWithReplica() throws Exception {
-    long blkId = 7600037L;
-    File blockDir = DatanodeUtil.idToBlockDir(new File(BASE_PATH), blkId);
+    String baseDir = GenericTestUtils.getRandomizedTempPath();
+    long blkId = getRandomBlockId();
+    File blockDir = DatanodeUtil.idToBlockDir(new File(baseDir), blkId);
     String subdir2 = blockDir.getName();
     String subdir1 = new File(blockDir.getParent()).getName();
     String diskSub = subdir2.equals("subdir0") ? "subdir1" : "subdir0";
 
     // the block file on disk
-    File diskBlockDir = new File(BASE_PATH + SEP + subdir1 + SEP + diskSub);
+    File diskBlockDir = new File(baseDir + SEP + subdir1 + SEP + diskSub);
     File realBlkFile = new File(diskBlockDir, BLOCK_FILE_PREFIX + blkId);
     // the block file in mem
     File memBlockDir = blockDir;
@@ -996,6 +1011,10 @@ public class TestBlockScanner {
     StorageLocation sl = StorageLocation.parse(realBlkFile.toString());
     localReplica.updateWithReplica(sl);
     assertEquals(realBlkFile, localReplica.getBlockFile());
+  }
+
+  public long getRandomBlockId() {
+    return Math.abs(new Random().nextLong());
   }
 
   private void waitForRescan(final TestScanResultHandler.Info info,
