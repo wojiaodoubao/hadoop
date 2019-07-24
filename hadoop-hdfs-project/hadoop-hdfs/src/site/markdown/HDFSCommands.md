@@ -358,6 +358,7 @@ Usage:
         hdfs dfsadmin [-refreshUserToGroupsMappings]
         hdfs dfsadmin [-refreshSuperUserGroupsConfiguration]
         hdfs dfsadmin [-refreshCallQueue]
+        hdfs dfsadmin [-refreshReaderQueue]
         hdfs dfsadmin [-refresh <host:ipc_port> <key> [arg1..argn]]
         hdfs dfsadmin [-reconfig <namenode|datanode> <host:ipc_port> <start |status |properties>]
         hdfs dfsadmin [-printTopology]
@@ -396,6 +397,7 @@ Usage:
 | `-refreshUserToGroupsMappings` | Refresh user-to-groups mappings. |
 | `-refreshSuperUserGroupsConfiguration` | Refresh superuser proxy groups mappings |
 | `-refreshCallQueue` | Reload the call queue from config. |
+| `-refreshReaderQueue` | Reload the reader queue from config. |
 | `-refresh` \<host:ipc\_port\> \<key\> [arg1..argn] | Triggers a runtime-refresh of the resource specified by \<key\> on \<host:ipc\_port\>. All other args after are sent to the host. |
 | `-reconfig` \<datanode \|namenode\> \<host:ipc\_port\> \<start\|status\|properties\> | Starts reconfiguration or gets the status of an ongoing reconfiguration, or gets a list of reconfigurable properties. The second parameter specifies the node type. |
 | `-printTopology` | Print a tree of the racks and their nodes as reported by the Namenode |
