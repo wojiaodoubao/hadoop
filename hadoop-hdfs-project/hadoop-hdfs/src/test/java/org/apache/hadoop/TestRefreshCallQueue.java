@@ -110,7 +110,7 @@ public class TestRefreshCallQueue {
   }
 
   /**
-   * MockReaderQueue
+   * MockReaderQueue.
    */
   public static class MockReaderQueue<E> extends LinkedBlockingQueue<E> {
     public MockReaderQueue(int cap, String ns, Configuration conf) {

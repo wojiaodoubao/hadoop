@@ -35,11 +35,11 @@ public class RefreshCallQueueProtocolServerSideTranslatorPB implements
   private final RefreshCallQueueProtocol impl;
 
   private final static RefreshCallQueueResponseProto
-  VOID_REFRESH_CALL_QUEUE_RESPONSE = RefreshCallQueueResponseProto
-      .newBuilder().build();
+      VOID_REFRESH_CALL_QUEUE_RESPONSE =
+      RefreshCallQueueResponseProto.newBuilder().build();
   private final static RefreshReaderQueueResponseProto
-  VOID_REFRESH_READER_QUEUE_RESPONE = RefreshReaderQueueResponseProto
-      .newBuilder().build();
+      VOID_REFRESH_READER_QUEUE_RESPONE =
+      RefreshReaderQueueResponseProto.newBuilder().build();
 
   public RefreshCallQueueProtocolServerSideTranslatorPB(
       RefreshCallQueueProtocol impl) {

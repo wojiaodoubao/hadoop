@@ -29,7 +29,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 /**
- * Basic tests of MetricLinkedBlockingQueue
+ * Basic tests of MetricLinkedBlockingQueue.
  */
 public class TestMetricLinkedBlockingQueue {
 
@@ -76,9 +76,9 @@ public class TestMetricLinkedBlockingQueue {
     Thread.sleep(3 * 1000);
     mlbq.put(new Object());
 
-    assertEquals(6 * 2 / 3, mlbq.getQps()[OP.PUT.ordinal()]);
-    assertEquals(6 * 1 / 3, mlbq.getQps()[OP.TAKE.ordinal()]);
-    assertEquals(6 * 1 / 3, mlbq.getQps()[OP.POLL_NOT_NULL.ordinal()]);
-    assertEquals((6 + 3) / 3, mlbq.getQps()[OP.POLL.ordinal()]);
+    assertEquals(6 * 2 / 3, mlbq.getOps()[OP.PUT.ordinal()]);
+    assertEquals(6 * 1 / 3, mlbq.getOps()[OP.TAKE.ordinal()]);
+    assertEquals(6 * 1 / 3, mlbq.getOps()[OP.POLL_NOT_NULL.ordinal()]);
+    assertEquals((6 + 3) / 3, mlbq.getOps()[OP.POLL.ordinal()]);
   }
 }

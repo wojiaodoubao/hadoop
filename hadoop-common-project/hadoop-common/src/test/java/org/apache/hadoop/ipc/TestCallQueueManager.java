@@ -169,16 +169,16 @@ public class TestCallQueueManager {
     t.interrupt();
   }
 
-  private static final Class<? extends BlockingQueue<FakeCall>> queueClass =
-      SwapQueueManager.convertQueueClass(
+  private static final Class<? extends BlockingQueue<FakeCall>> QUEUE_CLASS =
+      SwappableQueueManager.convertQueueClass(
           LinkedBlockingQueue.class, FakeCall.class);
 
-  private static final Class<? extends RpcScheduler> schedulerClass
+  private static final Class<? extends RpcScheduler> SCHEDULER_CLASS
       = CallQueueManager.convertSchedulerClass(DefaultRpcScheduler.class);
 
   @Test
   public void testCallQueueCapacity() throws InterruptedException {
-    manager = new CallQueueManager<FakeCall>(queueClass, schedulerClass, false,
+    manager = new CallQueueManager<>(QUEUE_CLASS, SCHEDULER_CLASS, false,
         10, "", conf);
 
     assertCanPut(manager, 10, 20); // Will stop at 10 due to capacity
@@ -186,7 +186,7 @@ public class TestCallQueueManager {
 
   @Test
   public void testEmptyConsume() throws InterruptedException {
-    manager = new CallQueueManager<FakeCall>(queueClass, schedulerClass, false,
+    manager = new CallQueueManager<>(QUEUE_CLASS, SCHEDULER_CLASS, false,
         10, "", conf);
 
     assertCanTake(manager, 0, 1); // Fails since it's empty
@@ -196,7 +196,7 @@ public class TestCallQueueManager {
       String prefix, Configuration conf) {
     String name = prefix + "." + CommonConfigurationKeys.IPC_CALLQUEUE_IMPL_KEY;
     Class<?> queueClass = conf.getClass(name, LinkedBlockingQueue.class);
-    return SwapQueueManager.convertQueueClass(queueClass, FakeCall.class);
+    return SwappableQueueManager.convertQueueClass(queueClass, FakeCall.class);
   }
 
   @Test
@@ -255,7 +255,7 @@ public class TestCallQueueManager {
 
   @Test(timeout=60000)
   public void testSwapUnderContention() throws InterruptedException {
-    manager = new CallQueueManager<FakeCall>(queueClass, schedulerClass, false,
+    manager = new CallQueueManager<>(QUEUE_CLASS, SCHEDULER_CLASS, false,
         5000, "", conf);
 
     ArrayList<Putter> producers = new ArrayList<Putter>();
@@ -285,7 +285,7 @@ public class TestCallQueueManager {
     Thread.sleep(500);
 
     for (int i=0; i < 5; i++) {
-      manager.swapQueue(schedulerClass, queueClass, 5000, "", conf);
+      manager.swapQueue(SCHEDULER_CLASS, QUEUE_CLASS, 5000, "", conf);
     }
 
     // Stop the producers
@@ -348,14 +348,13 @@ public class TestCallQueueManager {
       ExceptionFakeScheduler.class);
 
   private static final Class<? extends BlockingQueue<ExceptionFakeCall>>
-      exceptionClass = SwapQueueManager
+      exceptionClass = SwappableQueueManager
       .convertQueueClass(ExceptionFakeCall.class, ExceptionFakeCall.class);
 
   @Test
   public void testCallQueueConstructorException() throws InterruptedException {
     try {
-      new CallQueueManager<ExceptionFakeCall>(exceptionClass,
-          schedulerClass, false, 10, "", new Configuration());
+      new CallQueueManager<>(exceptionClass, SCHEDULER_CLASS, false, 10, "", new Configuration());
       fail();
     } catch (RuntimeException re) {
       assertTrue(re.getCause() instanceof IllegalArgumentException);
@@ -368,7 +367,7 @@ public class TestCallQueueManager {
   @Test
   public void testSchedulerConstructorException() throws InterruptedException {
     try {
-      new CallQueueManager<FakeCall>(queueClass, exceptionSchedulerClass,
+      new CallQueueManager<>(QUEUE_CLASS, exceptionSchedulerClass,
           false, 10, "", new Configuration());
       fail();
     } catch (RuntimeException re) {

@@ -676,10 +676,10 @@ public abstract class Server {
 
   static Class<? extends BlockingQueue<Connection>> getPendingConnectionClass(
       String prefix, Configuration conf) {
-    String k = prefix + "." + CommonConfigurationKeys.IPC_READERQUEUE_IMPL_KEY;
-    Class<?> pendingClass = conf.getClass(k, LinkedBlockingQueue.class);
-    return SwapQueueManager.convertQueueClass(pendingClass, Connection.class);
-   }
+    String ck = prefix + "." + CommonConfigurationKeys.IPC_READERQUEUE_IMPL_KEY;
+    Class<?> clazz = conf.getClass(ck, LinkedBlockingQueue.class);
+    return SwappableQueueManager.convertQueueClass(clazz, Connection.class);
+  }
 
   private String getQueueClassPrefix() {
     return CommonConfigurationKeys.IPC_NAMESPACE + "." + port;
@@ -689,7 +689,7 @@ public abstract class Server {
       String prefix, Configuration conf) {
     String name = prefix + "." + CommonConfigurationKeys.IPC_CALLQUEUE_IMPL_KEY;
     Class<?> queueClass = conf.getClass(name, LinkedBlockingQueue.class);
-    return SwapQueueManager.convertQueueClass(queueClass, Call.class);
+    return SwappableQueueManager.convertQueueClass(queueClass, Call.class);
   }
 
   static Class<? extends RpcScheduler> getSchedulerClass(
@@ -1225,7 +1225,7 @@ public abstract class Server {
     }
     
     private class Reader extends Thread {
-      private SwapQueueManager<Connection> pendingConnections;
+      private SwappableQueueManager<Connection> pendingConnections;
       private final Selector readSelector;
       private final int num;
 
@@ -1233,9 +1233,10 @@ public abstract class Server {
         super(name);
         this.num = num;
         final String prefix = getQueueClassPrefix();
-        this.pendingConnections = new SwapQueueManager<>(SwapQueueManager
-            .createQueueInstance(getPendingConnectionClass(prefix, conf),
-                readerPendingConnectionQueue, "reader-" + num, conf));
+        this.pendingConnections = new SwappableQueueManager<>(
+            SwappableQueueManager
+                .createQueueInstance(getPendingConnectionClass(prefix, conf),
+                    readerPendingConnectionQueue, "reader-" + num, conf));
         this.readSelector = Selector.open();
       }
       
@@ -1320,7 +1321,7 @@ public abstract class Server {
       void refreshPendingConnections(Configuration config) {
         final String prefix = getQueueClassPrefix();
         String ns = "reader-" + num;
-        pendingConnections.swapQueue(SwapQueueManager
+        pendingConnections.swapQueue(SwappableQueueManager
             .createQueueInstance(getPendingConnectionClass(prefix, config),
                 readerPendingConnectionQueue, ns, config));
       }

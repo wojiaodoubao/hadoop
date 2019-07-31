@@ -32,12 +32,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Abstracts queue operations for different blocking queues.
+ * SwappableQueueManager abstracts queue operations for different blocking
+ * queues and supports swapping blocking queues while running.
  */
-public class SwapQueueManager<E> extends AbstractQueue<E>
+public class SwappableQueueManager<E> extends AbstractQueue<E>
     implements BlockingQueue<E> {
   public static final Logger LOG =
-      LoggerFactory.getLogger(SwapQueueManager.class);
+      LoggerFactory.getLogger(SwappableQueueManager.class);
   // Number of checkpoints for empty queue.
   private static final int CHECKPOINT_NUM = 20;
   // Interval to check empty queue.
@@ -54,7 +55,7 @@ public class SwapQueueManager<E> extends AbstractQueue<E>
   private final AtomicReference<BlockingQueue<E>> putRef;
   private final AtomicReference<BlockingQueue<E>> takeRef;
 
-  public SwapQueueManager(Class<? extends BlockingQueue<E>> backingClass,
+  public SwappableQueueManager(Class<? extends BlockingQueue<E>> backingClass,
       int maxQueueSize, String namespace, Configuration conf) {
     BlockingQueue<E> bq = createQueueInstance(backingClass,
         maxQueueSize, namespace, conf);
@@ -64,7 +65,7 @@ public class SwapQueueManager<E> extends AbstractQueue<E>
         maxQueueSize);
   }
 
-  SwapQueueManager(BlockingQueue<E> queue) {
+  SwappableQueueManager(BlockingQueue<E> queue) {
     this.putRef = new AtomicReference<>(queue);
     this.takeRef = new AtomicReference<>(queue);
     LOG.info("Using swapQueue: {}, queueCapacity: {}.", queue.getClass(),
@@ -192,7 +193,7 @@ public class SwapQueueManager<E> extends AbstractQueue<E>
 
     // Wait for handlers to drain the oldQ
     while (!queueIsReallyEmpty(oldQ)) {
-      // do nothing
+      ;// do nothing
     }
 
     // Swap takeRef to handle new calls

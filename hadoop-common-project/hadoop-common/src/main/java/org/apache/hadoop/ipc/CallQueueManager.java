@@ -35,7 +35,7 @@ import org.slf4j.LoggerFactory;
  * Abstracts queue operations for different blocking queues.
  */
 public class CallQueueManager<E extends Schedulable>
-    extends SwapQueueManager<E> implements BlockingQueue<E> {
+    extends SwappableQueueManager<E> implements BlockingQueue<E> {
   public static final Logger LOG =
       LoggerFactory.getLogger(CallQueueManager.class);
 

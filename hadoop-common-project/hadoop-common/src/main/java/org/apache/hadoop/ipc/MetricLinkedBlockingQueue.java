@@ -34,7 +34,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_METRIC_BLOCKING_Q
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_METRIC_BLOCKING_QUEUE_LOG_THRESHOLD_DEFAULT;
 
 /**
- * Compute qps and write log when the queue is full. It's used to monitor the
+ * Compute ops and write log when the queue is full. It's used to monitor the
  * rpc queues(Reader queue and Call queue).
  */
 public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
@@ -43,7 +43,7 @@ public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
     TAKE, PUT, POLL, POLL_NOT_NULL
   }
   private AtomicInteger[] total;
-  private int[] qps;
+  private final int[] ops = new int[OP.values().length];
   private volatile long startTime;
 
   private int logSize;
@@ -53,7 +53,6 @@ public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
     super(size);
     this.interval = conf.getLong(IPC_METRIC_BLOCKING_QUEUE_INTERVAL,
         IPC_METRIC_BLOCKING_QUEUE_INTERVAL_DEFAULT);
-    qps = new int[OP.values().length];
     total = new AtomicInteger[OP.values().length];
     for (OP o : OP.values()) {
       total[o.ordinal()] = new AtomicInteger();
@@ -124,16 +123,16 @@ public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
     return e;
   }
 
-  void updateQps(OP op) {
+  private void updateQps(OP op) {
     long current = Time.monotonicNow();
     if (current - startTime < interval) {
       total[op.ordinal()].incrementAndGet();
     } else {
-      synchronized (qps) {
+      synchronized (ops) {
         if (current - startTime >= interval) {
           startTime = current;
           for (OP o : OP.values()) {
-            qps[o.ordinal()] = updateQps(total[o.ordinal()]);
+            ops[o.ordinal()] = updateQps(total[o.ordinal()]);
           }
         }
       }
@@ -141,17 +140,17 @@ public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
     }
   }
 
-  int updateQps(AtomicInteger ai) {
+  private int updateQps(AtomicInteger ai) {
     int aiTotal = ai.get();
     ai.set(0);
     return aiTotal / (int)(interval / 1000);
   }
 
-  public int[] getQps() {
+  public int[] getOps() {
     int[] res = new int[OP.values().length];
-    synchronized (qps) {
+    synchronized (ops) {
       for (OP o : OP.values()) {
-        res[o.ordinal()] = qps[o.ordinal()];
+        res[o.ordinal()] = ops[o.ordinal()];
       }
     }
     return res;
@@ -221,7 +220,7 @@ public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
       if (obj == null) {
         return -1;
       }
-      return obj.getQps()[op.ordinal()];
+      return obj.getOps()[op.ordinal()];
     }
 
     @Override

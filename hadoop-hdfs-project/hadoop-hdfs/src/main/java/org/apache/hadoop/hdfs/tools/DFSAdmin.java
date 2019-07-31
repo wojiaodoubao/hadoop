@@ -450,7 +450,7 @@ public class DFSAdmin extends FsShell {
     "\t[-refreshUserToGroupsMappings]\n" +
     "\t[-refreshSuperUserGroupsConfiguration]\n" +
     "\t[-refreshCallQueue]\n" +
-    "\t[-refreshReaderQueue]\n" +
+      "\t[-refreshReaderQueue]\n" +
     "\t[-refresh <host:ipc_port> <key> [arg1..argn]\n" +
     "\t[-reconfig <namenode|datanode> <host:ipc_port> " +
       "<start|status|properties>]\n" +
