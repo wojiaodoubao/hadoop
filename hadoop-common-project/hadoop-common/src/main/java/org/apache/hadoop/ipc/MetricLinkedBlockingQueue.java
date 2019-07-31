@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.ipc;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.metrics2.util.MBeans;
 import org.apache.hadoop.util.Time;
@@ -154,6 +155,11 @@ public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
       }
     }
     return res;
+  }
+
+  @VisibleForTesting
+  int getQueueTotal() {
+    return this.queueTotal.get();
   }
 
   /**

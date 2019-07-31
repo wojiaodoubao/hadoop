@@ -49,14 +49,14 @@ public class TestMetricLinkedBlockingQueue {
 
   @Test
   public void testQueueTotalComputation() throws InterruptedException {
-    assertEquals(0, mlbq.queueTotal.get());
+    assertEquals(0, mlbq.getQueueTotal());
     for (int i = 0; i < 5; i++) {
       mlbq.put(new Object());
-      assertEquals(i + 1, mlbq.queueTotal.get());
+      assertEquals(i + 1, mlbq.getQueueTotal());
     }
     for (int i = 0; i < 5; i++) {
       mlbq.take();
-      assertEquals(4 - i, mlbq.queueTotal.get());
+      assertEquals(4 - i, mlbq.getQueueTotal());
     }
   }
 
