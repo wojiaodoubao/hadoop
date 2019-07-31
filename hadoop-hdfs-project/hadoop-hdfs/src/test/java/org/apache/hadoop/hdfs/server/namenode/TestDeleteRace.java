@@ -18,6 +18,8 @@
 package org.apache.hadoop.hdfs.server.namenode;
 
 import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -31,6 +33,7 @@ import java.util.TreeSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.hdfs.AddBlockFlag;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -65,6 +68,7 @@ import org.mockito.Mockito;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LEASE_RECHECK_INTERVAL_MS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LEASE_RECHECK_INTERVAL_MS_KEY;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Test race between delete and other operations.  For now only addBlock()
@@ -438,6 +442,81 @@ public class TestDeleteRace {
       }
       if (cluster != null) {
         cluster.shutdown();
+      }
+    }
+  }
+
+  @Test
+  public void testOpenRenameRace() throws Exception {
+    Configuration config = new Configuration();
+    config.setLong(DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY, 1000);
+    MiniDFSCluster dfsCluster = null;
+    final String src = "/dir/src-file";
+    final String dst = "/dir/dst-file";
+    final DistributedFileSystem hdfs;
+    try {
+      dfsCluster = new MiniDFSCluster.Builder(config).build();
+      dfsCluster.waitActive();
+      final FSNamesystem fsn = dfsCluster.getNamesystem();
+
+      hdfs = dfsCluster.getFileSystem();
+      OutputStream out = hdfs.create(new Path(src));
+      out.write("hello".getBytes());
+      out.close();
+      FileStatus status = hdfs.getFileStatus(new Path(src));
+      long accessTime = status.getAccessTime();
+
+      // getSetThread start
+      //      | 2s
+      //      | openThread start
+      //      | 2s
+      //      | renameThread start, now openThread and renameThread all get set.
+      //      | 2s
+      //      | getSetThread end, it's fair lock so openThread got lock.
+      //      | openThread unlock, renameThread got lock immediately and rename.
+      //      | renameThread unlock, openThread got lock and update time.
+      Thread getSetThread = new Thread(new Runnable() {
+        @Override
+        public void run() {
+          fsn.writeLock();
+          try {
+            Thread.sleep(6000);
+          } catch (InterruptedException e) {
+          }
+          fsn.writeUnlock();
+        }
+      });
+      Thread openThread = new Thread(new Runnable() {
+        @Override public void run() {
+          try {
+            hdfs.open(new Path(src));
+          } catch (IOException e) {
+          }
+        }
+      });
+      Thread renameThread = new Thread(new Runnable() {
+        @Override public void run() {
+          try {
+            hdfs.rename(new Path(src), new Path(dst));
+          } catch (IOException e) {
+          }
+        }
+      });
+      getSetThread.start();
+      Thread.sleep(2000);
+      openThread.start();
+      Thread.sleep(2000);
+      renameThread.start();
+
+      openThread.join();
+      renameThread.join();
+
+      status = hdfs.getFileStatus(new Path(dst));
+      assertTrue(status.getAccessTime() - accessTime > 1000);
+      dfsCluster.restartNameNode(0);
+    } finally {
+      if (dfsCluster != null) {
+        dfsCluster.shutdown();
       }
     }
   }

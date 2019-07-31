@@ -1966,9 +1966,12 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     checkOperation(OperationCategory.READ);
     GetBlockLocationsResult res = null;
     final FSPermissionChecker pc = getPermissionChecker();
+    final INode inode;
     readLock();
     try {
       checkOperation(OperationCategory.READ);
+      INodesInPath iip = dir.resolvePath(pc, srcArg, DirOp.READ);
+      inode = iip.getLastINode();
       res = FSDirStatAndListingOp.getBlockLocations(
           dir, pc, srcArg, offset, length, true);
       if (isInSafeMode()) {
@@ -2029,16 +2032,16 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
          * HDFS-7463. A better fix is to change the edit log of SetTime to
          * use inode id instead of a path.
          */
-        final INodesInPath iip = dir.resolvePath(pc, srcArg, DirOp.READ);
-        src = iip.getPath();
-
-        INode inode = iip.getLastINode();
-        boolean updateAccessTime = inode != null &&
-            now > inode.getAccessTime() + dir.getAccessTimePrecision();
-        if (!isInSafeMode() && updateAccessTime) {
-          boolean changed = FSDirAttrOp.setTimes(dir, iip, -1, now, false);
-          if (changed) {
-            getEditLog().logTimes(src, -1, now);
+        if (!inode.isDeleted()) {
+          boolean updateAccessTime =
+              now > inode.getAccessTime() + dir.getAccessTimePrecision();
+          if (!isInSafeMode() && updateAccessTime) {
+            src = inode.getFullPathName();
+            final INodesInPath iip = dir.resolvePath(pc, src, DirOp.READ);
+            boolean changed = FSDirAttrOp.setTimes(dir, iip, -1, now, false);
+            if (changed) {
+              getEditLog().logTimes(src, -1, now);
+            }
           }
         }
       } catch (Throwable e) {
