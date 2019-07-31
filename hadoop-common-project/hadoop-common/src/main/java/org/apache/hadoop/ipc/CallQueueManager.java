@@ -232,10 +232,9 @@ public class CallQueueManager<E extends Schedulable>
   }
 
   /**
-   * Replaces active queue with the newly requested one and transfers
-   * all calls to the newQ before returning.
+   * Replaces active queue and scheduler with the newly requested one.
    */
-  public synchronized void swapQueue(
+  public synchronized void swapQueueAndRpcScheduler(
       Class<? extends RpcScheduler> schedulerClass,
       Class<? extends BlockingQueue<E>> queueClassToUse, int maxSize, String ns,
       Configuration conf) {
@@ -247,16 +246,6 @@ public class CallQueueManager<E extends Schedulable>
         priorityLevels, maxSize, ns, conf);
     super.swapQueue(newQ);
     this.scheduler = newScheduler;
-  }
-
-  /**
-   * Never call this method.
-   */
-  @Override
-  public synchronized void swapQueue(BlockingQueue<E> newQ) {
-    LOG.warn("Call swapQueue(Class<? extends RpcScheduler> schedulerClass,"
-        + " Class<? extends BlockingQueue<E>> queueClassToUse, int maxSize,"
-        + " String ns, Configuration conf) instead.");
   }
 
   // exception that mimics the standard ISE thrown by blocking queues but

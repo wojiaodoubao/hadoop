@@ -42,12 +42,12 @@ public class TestMetricLinkedBlockingQueue {
     mlbq = new MetricLinkedBlockingQueue<Object>(5, "ns", conf);
   }
 
-  @Test
+  @Test(timeout = 10000)
   public void testPollReturnsNullWhenEmpty() {
     assertNull(mlbq.poll());
   }
 
-  @Test
+  @Test(timeout = 10000)
   public void testQueueTotalComputation() throws InterruptedException {
     assertEquals(0, mlbq.getQueueTotal());
     for (int i = 0; i < 5; i++) {
@@ -60,8 +60,8 @@ public class TestMetricLinkedBlockingQueue {
     }
   }
 
-  @Test
-  public void testQps() throws Exception {
+  @Test(timeout = 10000)
+  public void testOps() throws Exception {
     for (int i = 0; i < 6; i++) {
       mlbq.put(new Object());
       mlbq.put(new Object());

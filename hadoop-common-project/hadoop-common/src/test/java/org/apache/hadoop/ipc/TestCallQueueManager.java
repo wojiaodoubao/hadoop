@@ -285,7 +285,8 @@ public class TestCallQueueManager {
     Thread.sleep(500);
 
     for (int i=0; i < 5; i++) {
-      manager.swapQueue(SCHEDULER_CLASS, QUEUE_CLASS, 5000, "", conf);
+      manager.swapQueueAndRpcScheduler(SCHEDULER_CLASS, QUEUE_CLASS, 5000, "",
+          conf);
     }
 
     // Stop the producers
