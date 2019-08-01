@@ -192,8 +192,9 @@ public class SwappableQueueManager<E> extends AbstractQueue<E>
     putRef.set(newQ);
 
     // Wait for handlers to drain the oldQ
-    while (!queueIsReallyEmpty(oldQ)) {
-      ;// do nothing
+    boolean isReallyEmpty = queueIsReallyEmpty(oldQ);
+    while (!isReallyEmpty) {
+      isReallyEmpty = queueIsReallyEmpty(oldQ);
     }
 
     // Swap takeRef to handle new calls

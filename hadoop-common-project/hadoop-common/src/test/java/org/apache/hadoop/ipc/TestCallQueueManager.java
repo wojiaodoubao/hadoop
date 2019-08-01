@@ -178,16 +178,18 @@ public class TestCallQueueManager {
 
   @Test
   public void testCallQueueCapacity() throws InterruptedException {
-    manager = new CallQueueManager<>(QUEUE_CLASS, SCHEDULER_CLASS, false,
-        10, "", conf);
+    manager =
+        new CallQueueManager<>(QUEUE_CLASS, SCHEDULER_CLASS, false, 10, "",
+            conf);
 
     assertCanPut(manager, 10, 20); // Will stop at 10 due to capacity
   }
 
   @Test
   public void testEmptyConsume() throws InterruptedException {
-    manager = new CallQueueManager<>(QUEUE_CLASS, SCHEDULER_CLASS, false,
-        10, "", conf);
+    manager =
+        new CallQueueManager<>(QUEUE_CLASS, SCHEDULER_CLASS, false, 10, "",
+            conf);
 
     assertCanTake(manager, 0, 1); // Fails since it's empty
   }
@@ -255,8 +257,9 @@ public class TestCallQueueManager {
 
   @Test(timeout=60000)
   public void testSwapUnderContention() throws InterruptedException {
-    manager = new CallQueueManager<>(QUEUE_CLASS, SCHEDULER_CLASS, false,
-        5000, "", conf);
+    manager =
+        new CallQueueManager<>(QUEUE_CLASS, SCHEDULER_CLASS, false, 5000, "",
+            conf);
 
     ArrayList<Putter> producers = new ArrayList<Putter>();
     ArrayList<Taker> consumers = new ArrayList<Taker>();
@@ -344,31 +347,30 @@ public class TestCallQueueManager {
     }
   }
 
-  private static final Class<? extends RpcScheduler>
-      exceptionSchedulerClass = CallQueueManager.convertSchedulerClass(
-      ExceptionFakeScheduler.class);
+  private static final Class<? extends RpcScheduler> EXCPETION_SCHEDULER_CLASS =
+      CallQueueManager.convertSchedulerClass(ExceptionFakeScheduler.class);
 
   private static final Class<? extends BlockingQueue<ExceptionFakeCall>>
-      exceptionClass = SwappableQueueManager
+      EXCEPTION_CLASS = SwappableQueueManager
       .convertQueueClass(ExceptionFakeCall.class, ExceptionFakeCall.class);
 
   @Test
   public void testCallQueueConstructorException() throws InterruptedException {
     try {
-      new CallQueueManager<>(exceptionClass, SCHEDULER_CLASS, false, 10, "", new Configuration());
+      new CallQueueManager<>(EXCEPTION_CLASS, SCHEDULER_CLASS, false, 10, "",
+          new Configuration());
       fail();
     } catch (RuntimeException re) {
       assertTrue(re.getCause() instanceof IllegalArgumentException);
-      assertEquals("Exception caused by call queue constructor.!!", re
-          .getCause()
-          .getMessage());
+      assertEquals("Exception caused by call queue constructor.!!",
+          re.getCause().getMessage());
     }
   }
 
   @Test
   public void testSchedulerConstructorException() throws InterruptedException {
     try {
-      new CallQueueManager<>(QUEUE_CLASS, exceptionSchedulerClass,
+      new CallQueueManager<>(QUEUE_CLASS, EXCPETION_SCHEDULER_CLASS,
           false, 10, "", new Configuration());
       fail();
     } catch (RuntimeException re) {
