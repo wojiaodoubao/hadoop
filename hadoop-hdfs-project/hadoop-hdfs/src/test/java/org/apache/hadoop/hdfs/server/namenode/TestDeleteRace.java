@@ -68,7 +68,7 @@ import org.mockito.Mockito;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LEASE_RECHECK_INTERVAL_MS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LEASE_RECHECK_INTERVAL_MS_KEY;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotEquals;
 
 /**
  * Test race between delete and other operations.  For now only addBlock()
@@ -446,10 +446,10 @@ public class TestDeleteRace {
     }
   }
 
-  @Test
+  @Test(timeout = 20000)
   public void testOpenRenameRace() throws Exception {
     Configuration config = new Configuration();
-    config.setLong(DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY, 1000);
+    config.setLong(DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY, 1);
     MiniDFSCluster dfsCluster = null;
     final String src = "/dir/src-file";
     final String dst = "/dir/dst-file";
@@ -458,7 +458,6 @@ public class TestDeleteRace {
       dfsCluster = new MiniDFSCluster.Builder(config).build();
       dfsCluster.waitActive();
       final FSNamesystem fsn = dfsCluster.getNamesystem();
-
       hdfs = dfsCluster.getFileSystem();
       OutputStream out = hdfs.create(new Path(src));
       out.write("hello".getBytes());
@@ -466,53 +465,39 @@ public class TestDeleteRace {
       FileStatus status = hdfs.getFileStatus(new Path(src));
       long accessTime = status.getAccessTime();
 
-      // getSetThread start
-      //      | 2s
-      //      | openThread start
-      //      | 2s
-      //      | renameThread start, now openThread and renameThread all get set.
-      //      | 2s
-      //      | getSetThread end, it's fair lock so openThread got lock.
-      //      | openThread unlock, renameThread got lock immediately and rename.
-      //      | renameThread unlock, openThread got lock and update time.
-      Thread getSetThread = new Thread(new Runnable() {
-        @Override
-        public void run() {
-          fsn.writeLock();
-          try {
-            Thread.sleep(6000);
-          } catch (InterruptedException e) {
-          }
-          fsn.writeUnlock();
+      // 1.hold writeLock.
+      // 2.start open thread.
+      // 3.sleep 1ms, make sure open thread wait on readLock.
+      // 4.start rename thread.
+      // 5.wait 1ms, make sure rename thread wait on writeLock.
+      // 6.release writeLock, it's fair lock so open thread gets read lock.
+      // 7.open thread unlocks, rename gets write lock and does rename.
+      // 8.rename thread unlocks, open thread gets write lock and update time.
+      Thread open = new Thread(() -> {
+        try {
+          hdfs.open(new Path(src));
+        } catch (IOException e) {
         }
       });
-      Thread openThread = new Thread(new Runnable() {
-        @Override public void run() {
-          try {
-            hdfs.open(new Path(src));
-          } catch (IOException e) {
-          }
+      Thread rename = new Thread(() -> {
+        try {
+          hdfs.rename(new Path(src), new Path(dst));
+        } catch (IOException e) {
         }
       });
-      Thread renameThread = new Thread(new Runnable() {
-        @Override public void run() {
-          try {
-            hdfs.rename(new Path(src), new Path(dst));
-          } catch (IOException e) {
-          }
-        }
-      });
-      getSetThread.start();
-      Thread.sleep(2000);
-      openThread.start();
-      Thread.sleep(2000);
-      renameThread.start();
+      fsn.writeLock();
+      open.start();
+      Thread.sleep(1);
+      rename.start();
+      Thread.sleep(1);
+      fsn.writeUnlock();
 
-      openThread.join();
-      renameThread.join();
+      // wait open and rename threads finish.
+      open.join();
+      rename.join();
 
       status = hdfs.getFileStatus(new Path(dst));
-      assertTrue(status.getAccessTime() - accessTime > 1000);
+      assertNotEquals(accessTime, status.getAccessTime());
       dfsCluster.restartNameNode(0);
     } finally {
       if (dfsCluster != null) {
