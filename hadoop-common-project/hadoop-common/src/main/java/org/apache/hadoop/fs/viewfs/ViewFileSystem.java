@@ -18,6 +18,8 @@
 package org.apache.hadoop.fs.viewfs;
 
 import static org.apache.hadoop.fs.viewfs.Constants.PERMISSION_555;
+import static org.apache.hadoop.fs.viewfs.Constants.CONFIG_VIEWFS_ENABLE_INNER_CACHE;
+import static org.apache.hadoop.fs.viewfs.Constants.CONFIG_VIEWFS_ENABLE_INNER_CACHE_DEFAULT;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -27,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -90,6 +93,63 @@ public class ViewFileSystem extends FileSystem {
   }
 
   /**
+   * Caching children filesystems.
+   */
+  static class InnerCache {
+    private HashMap<Key, FileSystem> map = new HashMap<>();
+
+    FileSystem get(URI uri, Configuration config) throws IOException {
+      Key key = new Key(uri);
+      if (map.get(key) == null) {
+        FileSystem fs = FileSystem.newInstance(uri, config);
+        map.put(key, fs);
+        return fs;
+      } else {
+        return map.get(key);
+      }
+    }
+
+    void closeAll() {
+      for (FileSystem fs : map.values()) {
+        try {
+          fs.close();
+        } catch (IOException e) {
+          LOG.debug("close failed " + fs, e);
+        }
+      }
+    }
+
+    private static class Key {
+      private final String scheme;
+      private final String authority;
+
+      Key(URI uri) {
+        scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
+        authority =
+            uri.getAuthority() == null ? "" : uri.getAuthority().toLowerCase();
+      }
+
+      @Override
+      public int hashCode() {
+        return (scheme + authority).hashCode();
+      }
+
+      @Override
+      public boolean equals(Object obj) {
+        if (obj == this) {
+          return true;
+        }
+        if (obj != null && obj instanceof Key) {
+          Key that = (Key) obj;
+          return this.scheme.equals(that.scheme) && this.authority
+              .equals(that.authority);
+        }
+        return false;
+      }
+    }
+  }
+
+  /**
    * MountPoint representation built from the configuration.
    */
   public static class MountPoint {
@@ -125,6 +185,8 @@ public class ViewFileSystem extends FileSystem {
   Configuration config;
   InodeTree<FileSystem> fsState;  // the fs state; ie the mount table
   Path homeDir = null;
+  private boolean enableInnerCache = false;
+  private InnerCache cache;
   // Default to rename within same mountpoint
   private RenameStrategy renameStrategy = RenameStrategy.SAME_MOUNTPOINT;
   /**
@@ -178,6 +240,11 @@ public class ViewFileSystem extends FileSystem {
     super.initialize(theUri, conf);
     setConf(conf);
     config = conf;
+    enableInnerCache = config.getBoolean(CONFIG_VIEWFS_ENABLE_INNER_CACHE,
+        CONFIG_VIEWFS_ENABLE_INNER_CACHE_DEFAULT);
+    if (enableInnerCache && cache == null) {
+      cache = new InnerCache();
+    }
     // Now build  client side view (i.e. client side mount table) from config.
     final String authority = theUri.getAuthority();
     try {
@@ -187,7 +254,13 @@ public class ViewFileSystem extends FileSystem {
         @Override
         protected FileSystem getTargetFileSystem(final URI uri)
           throws URISyntaxException, IOException {
-            return new ChRootedFileSystem(uri, config);
+            FileSystem fs = null;
+            if (enableInnerCache) {
+              fs = cache.get(uri, config);
+            } else {
+              fs = FileSystem.get(uri, config);
+            }
+            return new ChRootedFileSystem(fs, uri);
         }
 
         @Override
@@ -1296,5 +1369,13 @@ public class ViewFileSystem extends FileSystem {
   enum RenameStrategy {
     SAME_MOUNTPOINT, SAME_TARGET_URI_ACROSS_MOUNTPOINT,
     SAME_FILESYSTEM_ACROSS_MOUNTPOINT
+  }
+
+  @Override
+  public void close() throws IOException {
+    if (enableInnerCache) {
+      cache.closeAll();
+    }
+    super.close();
   }
 }

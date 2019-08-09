@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.EnumSet;
+import java.util.Random;
 
 import javax.security.auth.login.LoginException;
 
@@ -56,7 +57,9 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
 import static org.junit.Assert.*;
+import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -403,5 +406,70 @@ public class TestViewFileSystemHdfs extends ViewFileSystemBaseTest {
         }
       }
     }
+  }
+
+  @Test
+  public void testViewFilsSystemInnerCache() throws Exception {
+    ViewFileSystem.InnerCache cache = new ViewFileSystem.InnerCache();
+    FileSystem fs = cache.get(fHdfs.getUri(), conf);
+
+    // InnerCache caches filesystem.
+    assertSame(fs, cache.get(fHdfs.getUri(), conf));
+
+    // InnerCache and FileSystem.CACHE are independent.
+    assertNotSame(fs, FileSystem.get(fHdfs.getUri(), conf));
+
+    // close InnerCache
+    cache.closeAll();
+    try {
+      fs.exists(new Path("/"));
+      fail("Expect Filesystem closed exception");
+    } catch (IOException e) {
+      assertExceptionContains("Filesystem closed", e);
+    }
+  }
+
+  @Test
+  public void testCloseChildrenFileSystem() throws Exception {
+    final String clusterName = "cluster" + new Random().nextInt();
+    Configuration config = new Configuration(conf);
+    ConfigUtil.addLink(config, clusterName, "/user", fHdfs.getUri());
+    config.setBoolean("fs.viewfs.impl.disable.cache", false);
+    URI uri = new URI("viewfs://" + clusterName + "/");
+
+    ViewFileSystem viewFs = (ViewFileSystem) FileSystem.get(uri, config);
+    assertTrue("viewfs should have at least one child fs.",
+        viewFs.getChildFileSystems().length > 0);
+    // viewFs is cached in FileSystem.CACHE
+    assertSame(viewFs, FileSystem.get(uri, config));
+
+    // child fs is not cached in FileSystem.CACHE
+    FileSystem child = viewFs.getChildFileSystems()[0];
+    assertNotSame(child, FileSystem.get(child.getUri(), config));
+
+    viewFs.close();
+    // children filesystems should all be closed.
+    for (FileSystem childfs : viewFs.getChildFileSystems()) {
+      try {
+        childfs.exists(new Path("/"));
+        fail("Expect Filesystem closed exception");
+      } catch (IOException e) {
+        assertExceptionContains("Filesystem closed", e);
+      }
+    }
+  }
+
+  @Test
+  public void testChildrenFileSystemLeak() throws Exception {
+    final String clusterName = "cluster" + new Random().nextInt();
+    Configuration config = new Configuration(conf);
+    ConfigUtil.addLink(config, clusterName, "/user", fHdfs.getUri());
+
+    final int cacheSize = FileSystem.cacheSize();
+    ViewFileSystem viewFs = (ViewFileSystem) FileSystem
+        .get(new URI("viewfs://" + clusterName + "/"), config);
+    assertEquals(cacheSize + 1, FileSystem.cacheSize());
+    viewFs.close();
+    assertEquals(cacheSize, FileSystem.cacheSize());
   }
 }

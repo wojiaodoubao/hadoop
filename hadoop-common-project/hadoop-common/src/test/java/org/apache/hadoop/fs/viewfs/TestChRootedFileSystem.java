@@ -32,7 +32,6 @@ import org.apache.hadoop.fs.FilterFileSystem;
 import org.apache.hadoop.fs.FsConstants;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.AclEntry;
-import org.apache.hadoop.fs.viewfs.ChRootedFileSystem;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -396,7 +395,7 @@ public class TestChRootedFileSystem {
   }
 
   @Test
-  public void testListLocatedFileStatus() throws IOException {
+  public void testListLocatedFileStatus() throws Exception {
     final Path mockMount = new Path("mockfs://foo/user");
     final Path mockPath = new Path("/usermock");
     final Configuration conf = new Configuration();
@@ -404,17 +403,38 @@ public class TestChRootedFileSystem {
     ConfigUtil.addLink(conf, mockPath.toString(), mockMount.toUri());
     FileSystem vfs = FileSystem.get(URI.create("viewfs:///"), conf);
     vfs.listLocatedStatus(mockPath);
-    final FileSystem mockFs = ((MockFileSystem)mockMount.getFileSystem(conf))
-        .getRawFileSystem();
+    final FileSystem mockFs =
+        ((MockFileSystem) getChildFileSystem((ViewFileSystem) vfs,
+            new URI("mockfs://foo/"))).getRawFileSystem();
     verify(mockFs).listLocatedStatus(new Path(mockMount.toUri().getPath()));
   }
 
+  static FileSystem getChildFileSystem(ViewFileSystem viewFs, URI uri) {
+    for (FileSystem fs : viewFs.getChildFileSystems()) {
+      if (fs.getUri().getScheme() != null && fs.getUri().getScheme()
+          .equals(uri.getScheme()) || uri.getScheme() == null) {
+        if (fs.getUri().getAuthority() != null && fs.getUri().getAuthority()
+            .equals(uri.getAuthority()) || uri.getAuthority() == null) {
+          return fs;
+        }
+      }
+    }
+    return null;
+  }
+
   static class MockFileSystem extends FilterFileSystem {
+    URI uri;
     MockFileSystem() {
       super(mock(FileSystem.class));
     }
     @Override
-    public void initialize(URI name, Configuration conf) throws IOException {}
+    public URI getUri() {
+      return uri;
+    }
+    @Override
+    public void initialize(URI name, Configuration conf) throws IOException {
+      uri = name;
+    }
   }
 
   @Test(timeout = 30000)
