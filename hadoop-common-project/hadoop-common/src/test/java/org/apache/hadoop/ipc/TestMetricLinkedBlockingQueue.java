@@ -38,8 +38,9 @@ public class TestMetricLinkedBlockingQueue {
   @Before
   public void setUp() {
     Configuration conf = new Configuration();
-    conf.setLong(IPC_METRIC_BLOCKING_QUEUE_INTERVAL, 3 * 1000);
-    mlbq = new MetricLinkedBlockingQueue<Object>(5, "ns", conf);
+    String prefix = "ipc.0";
+    conf.setLong(prefix + "." + IPC_METRIC_BLOCKING_QUEUE_INTERVAL, 3 * 1000);
+    mlbq = new MetricLinkedBlockingQueue<>(5, prefix, "ns", conf);
   }
 
   @Test(timeout = 10000)

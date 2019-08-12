@@ -49,18 +49,21 @@ public class MetricLinkedBlockingQueue<E> extends LinkedBlockingQueue<E> {
   private int logSize;
   private AtomicInteger queueTotal;
 
-  public MetricLinkedBlockingQueue(int size, String ns, Configuration conf) {
+  public MetricLinkedBlockingQueue(int size, String prefix, String ns,
+      Configuration conf) {
     super(size);
-    this.interval = conf.getLong(IPC_METRIC_BLOCKING_QUEUE_INTERVAL,
-        IPC_METRIC_BLOCKING_QUEUE_INTERVAL_DEFAULT);
+    this.interval =
+        conf.getLong(prefix + "." + IPC_METRIC_BLOCKING_QUEUE_INTERVAL,
+            IPC_METRIC_BLOCKING_QUEUE_INTERVAL_DEFAULT);
     total = new AtomicInteger[OP.values().length];
     for (OP o : OP.values()) {
       total[o.ordinal()] = new AtomicInteger();
     }
     startTime = Time.monotonicNow();
     queueTotal = new AtomicInteger();
-    logSize = (int) (conf.getFloat(IPC_METRIC_BLOCKING_QUEUE_LOG_THRESHOLD,
-        IPC_METRIC_BLOCKING_QUEUE_LOG_THRESHOLD_DEFAULT) * size);
+    logSize = (int) (
+        conf.getFloat(prefix + "." + IPC_METRIC_BLOCKING_QUEUE_LOG_THRESHOLD,
+            IPC_METRIC_BLOCKING_QUEUE_LOG_THRESHOLD_DEFAULT) * size);
     // Make this the active source of metrics
     MetricsProxy mp = MetricsProxy.getInstance(ns);
     mp.setDelegate(this);

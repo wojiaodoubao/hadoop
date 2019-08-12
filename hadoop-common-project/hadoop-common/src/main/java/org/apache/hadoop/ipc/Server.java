@@ -1233,9 +1233,10 @@ public abstract class Server {
         super(name);
         this.num = num;
         final String prefix = getQueueClassPrefix();
+        final String ns = prefix + ".reader-" + num;
         this.pendingConnections =
             new SwappableQueueManager<>(getPendingConnectionClass(prefix, conf),
-                readerPendingConnectionQueue, "reader-" + num, conf);
+                readerPendingConnectionQueue, prefix, ns, conf);
         this.readSelector = Selector.open();
       }
       
@@ -1319,10 +1320,10 @@ public abstract class Server {
 
       void refreshPendingConnections(Configuration config) {
         final String prefix = getQueueClassPrefix();
-        String ns = "reader-" + num;
+        String ns = prefix + ".reader-" + num;
         pendingConnections.swapQueue(SwappableQueueManager
             .createQueueInstance(getPendingConnectionClass(prefix, config),
-                readerPendingConnectionQueue, ns, config));
+                readerPendingConnectionQueue, prefix, ns, config));
       }
     }
 

@@ -132,7 +132,7 @@ public class CallQueueManager<E extends Schedulable>
     } catch (Exception e) {
     }
 
-    return createQueueInstance(theClass, maxLen, ns, conf);
+    return createQueueInstance(theClass, maxLen, ns, ns, conf);
   }
 
   boolean isClientBackoffEnabled() {

@@ -136,11 +136,11 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
    * MetricLinkedBlockingQueue settings.
    */
   public static final String IPC_METRIC_BLOCKING_QUEUE_INTERVAL =
-      "ipc.metric.blocking.queue.interval";
+      "metric.blocking.queue.interval";
   public static final long IPC_METRIC_BLOCKING_QUEUE_INTERVAL_DEFAULT =
       5 * 60 * 1000; // 5min
   public static final String IPC_METRIC_BLOCKING_QUEUE_LOG_THRESHOLD =
-      "ipc.metric.blocking.queue.log.threshold";
+      "metric.blocking.queue.log.threshold";
   public static final float IPC_METRIC_BLOCKING_QUEUE_LOG_THRESHOLD_DEFAULT =
       1.0f;
 

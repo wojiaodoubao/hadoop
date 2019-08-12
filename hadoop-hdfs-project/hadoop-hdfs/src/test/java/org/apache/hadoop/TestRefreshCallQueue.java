@@ -113,7 +113,8 @@ public class TestRefreshCallQueue {
    * MockReaderQueue.
    */
   public static class MockReaderQueue<E> extends LinkedBlockingQueue<E> {
-    public MockReaderQueue(int cap, String ns, Configuration conf) {
+    public MockReaderQueue(int cap, String prefix, String ns,
+        Configuration conf) {
       super(cap);
       mockReaderConstructions++;
     }

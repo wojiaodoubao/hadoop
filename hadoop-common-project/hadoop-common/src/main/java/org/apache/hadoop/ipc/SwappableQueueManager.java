@@ -56,9 +56,9 @@ public class SwappableQueueManager<E> extends AbstractQueue<E>
   private final AtomicReference<BlockingQueue<E>> takeRef;
 
   public SwappableQueueManager(Class<? extends BlockingQueue<E>> backingClass,
-      int maxQueueSize, String namespace, Configuration conf) {
+      int maxQueueSize, String prefix, String namespace, Configuration conf) {
     BlockingQueue<E> bq = createQueueInstance(backingClass,
-        maxQueueSize, namespace, conf);
+        maxQueueSize, prefix, namespace, conf);
     this.putRef = new AtomicReference<>(bq);
     this.takeRef = new AtomicReference<>(bq);
     LOG.info("Using swapQueue: {}, queueCapacity: {}.", backingClass,
@@ -73,12 +73,13 @@ public class SwappableQueueManager<E> extends AbstractQueue<E>
   }
 
   static <T extends BlockingQueue> T createQueueInstance(Class<T> theClass,
-      int maxLen, String ns, Configuration conf) {
+      int maxLen, String prefix, String ns, Configuration conf) {
     // Used for custom, configurable callqueues
     try {
       Constructor<T> ctor = theClass
-          .getDeclaredConstructor(int.class, String.class, Configuration.class);
-      return ctor.newInstance(maxLen, ns, conf);
+          .getDeclaredConstructor(int.class, String.class, String.class,
+              Configuration.class);
+      return ctor.newInstance(maxLen, prefix, ns, conf);
     } catch (RuntimeException e) {
       throw e;
     } catch (InvocationTargetException e) {
