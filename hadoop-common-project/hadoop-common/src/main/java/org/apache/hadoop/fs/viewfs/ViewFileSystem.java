@@ -1373,9 +1373,9 @@ public class ViewFileSystem extends FileSystem {
 
   @Override
   public void close() throws IOException {
+    super.close();
     if (enableInnerCache) {
       cache.closeAll();
     }
-    super.close();
   }
 }

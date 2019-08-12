@@ -68,11 +68,11 @@ public class TestViewFileSystemDelegation { //extends ViewFileSystemTestSetup {
     ConfigUtil.addLink(conf, "/mounts/"+scheme, targetPath.toUri());
   }
 
-  private static void setupMockFileSystem(Configuration conf, URI uri)
+  private static void setupMockFileSystem(Configuration config, URI uri)
       throws Exception {
     String scheme = uri.getScheme();
-    conf.set("fs." + scheme + ".impl", MockFileSystem.class.getName());
-    ConfigUtil.addLink(conf, "/mounts/" + scheme, uri);
+    config.set("fs." + scheme + ".impl", MockFileSystem.class.getName());
+    ConfigUtil.addLink(config, "/mounts/" + scheme, uri);
   }
 
   @Test

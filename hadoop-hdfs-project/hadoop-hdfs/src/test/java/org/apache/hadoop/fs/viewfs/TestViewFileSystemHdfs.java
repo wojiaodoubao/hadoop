@@ -472,4 +472,23 @@ public class TestViewFileSystemHdfs extends ViewFileSystemBaseTest {
     viewFs.close();
     assertEquals(cacheSize, FileSystem.cacheSize());
   }
+
+  @Test
+  public void testDeleteOnExit() throws Exception {
+    final String clusterName = "cluster" + new Random().nextInt();
+    Configuration config = new Configuration(conf);
+    ConfigUtil.addLink(config, clusterName, "/user",
+        new URI(fHdfs.getUri().toString() + "/user"));
+
+    Path testDir = new Path("/user/testDeleteOnExit");
+    ViewFileSystem viewFs = (ViewFileSystem) FileSystem
+        .get(new URI("viewfs://" + clusterName + "/"), config);
+    viewFs.mkdirs(testDir);
+    assertTrue(viewFs.exists(testDir));
+    assertTrue(fHdfs.exists(testDir));
+
+    viewFs.deleteOnExit(testDir);
+    viewFs.close();
+    assertFalse(fHdfs.exists(testDir));
+  }
 }

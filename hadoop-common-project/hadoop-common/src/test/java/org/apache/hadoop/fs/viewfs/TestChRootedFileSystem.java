@@ -423,7 +423,7 @@ public class TestChRootedFileSystem {
   }
 
   static class MockFileSystem extends FilterFileSystem {
-    URI uri;
+    private URI uri;
     MockFileSystem() {
       super(mock(FileSystem.class));
     }
