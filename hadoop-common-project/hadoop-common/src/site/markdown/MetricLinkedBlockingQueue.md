@@ -45,10 +45,6 @@ This section describes how to configure the MetricLinkedBlockingQueue.
 
 ### Configuration Prefixes
 
-因为Reader有很多啊，所以就没办法搞成全部是ipc.port.xxx这种配置形式。
-ipc.metric.blocking.queue.interval就是只有这一项，所有用了MetricLinkedBlockingQueue的都一样；
-还有IPC_METRIC_BLOCKING_QUEUE_LOG_THRESHOLD=ipc.metric.blocking.queue.log.threshold，也是没办法。
-
 The MetricLinkedBlockingQueue-related configurations are relevant to only a single IPC server. That's the same as the
 Fair Call Queue. Each configuration is prefixed with `ipc.<port_number>`, where `<port_number>` is the port used by
 the IPC server to be configured.
@@ -59,6 +55,8 @@ the IPC server to be configured.
 |:---- |:---- |:---- |:--- |
 | callqueue.impl | General | The fully qualified name of a class to use as the implementation of a call queue. Use `org.apache.hadoop.ipc.MetricLinkedBlockingQueue` for the MetricLinkedBlockingQueue. | `java.util.concurrent.LinkedBlockingQueue` (FIFO queue) |
 | readerqueue.impl | General | The fully qualified name of a class to use as the implementation of a reader queue. Use `org.apache.hadoop.ipc.MetricLinkedBlockingQueue` for the MetricLinkedBlockingQueue. | `java.util.concurrent.LinkedBlockingQueue` (FIFO queue) |
+| metric.blocking.queue.interval | MetricLinkedBlockingQueue | The time interval to compute ops(operations per seconds). Time unit is milliseconds. | `300000` (5 minutes) |
+| metric.blocking.queue.log.threshold | MetricLinkedBlockingQueue | When the queue's size reaches queue's max size * threshold, the queue will write a log. | `1.0f` (write log when the queue is full) |
 
 ### Example Configuration
 
@@ -72,5 +70,40 @@ This is an example of configuration an IPC server at port 8020 to use `MetricLin
          <name>ipc.56200.callqueue.impl</name>
          <value>org.apache.hadoop.ipc.MetricLinkedBlockingQueue</value>
     </property>
+    <property>
+         <name>ipc.56200.metric.blocking.queue.interval</name>
+         <value>300000</value>
+    </property>
+    <property>
+         <name>ipc.56200.metric.blocking.queue.log.threshold</name>
+         <value>1.0f</value>
+    </property>
 
-这里再写一下url吧，怎么在jmx上看结果！怎么看每个队列的结果！
+### Statistics in jmx
+
+We can find the statistics from the ipc server's jmx. Using 'qry' helps us locating the jmx quickly. Supposing we have 2 reader queues and use the configuration in the above example, the url will be:
+
+    // The statistics of the first reader queue.
+    http://<ipc host>:<http_port>/jmx?qry=Hadoop:service=ipc.56200.reader-1,name=MetricLinkedBlockingQueue
+    // The statistics of the second reader queue.
+    http://<ipc host>:<http_port>/jmx?qry=Hadoop:service=ipc.56200.reader-2,name=MetricLinkedBlockingQueue
+    // The statistics of the call queue.
+    http://c4-hadoop-tst-ct02.bj:56201/jmx?qry=Hadoop:service=ipc.56200,name=MetricLinkedBlockingQueue
+
+### Explanation of statistical items
+
+MetricLinkedBlockingQueue statistics 4 kinds operations: put to the queue(Put), take from the queue(Take), poll from the queue(Poll),
+poll from the queue with the returned value is not null(PollNotNull).
+
+| Item | Description |
+|:---- |:---- |
+| LastPutPS | Put per second in the last interval. |
+| LastTakePS | Take per second in the last interval. |
+| LastPollPS |  Poll per second in the last interval.|
+| LastPollNotNullPS | Poll(with returned value not null) per second in the last interval. |
+| CurrentTotalPut | The total Put operations in the current interval. |
+| CurrentTotalTake | The total Take operations in the current interval. |
+| CurrentTotalPoll | The total Poll operations in the current interval. |
+| CurrentTotalPollNotNull | The total Poll(with returned value not null) operations in the current interval. |
+| CurrentStartTime | The start timestamp of the current interval. |
+| ComputeInterval | The interval in millie seconds. |
