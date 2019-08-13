@@ -3461,21 +3461,4 @@
       with the input domain name of the services by querying the underlying DNS.
     </description>
   </property>
-
-  <property>
-    <name>ipc.metric.blocking.queue.interval</name>
-    <value>300000</value>
-    <description>How open does the org.apache.hadoop.ipc.MetricLinkedBlockingQueue
-      compute ops.
-    </description>
-  </property>
-
-  <property>
-    <name>ipc.metric.blocking.queue.log.threshold</name>
-    <value>1.0</value>
-    <description>When the usage of org.apache.hadoop.ipc.MetricLinkedBlockingQueue
-      reaches threshold * maxSize, it will write a log. We can use this to find
-      the slowest queue.
-    </description>
-  </property>
 </configuration>
