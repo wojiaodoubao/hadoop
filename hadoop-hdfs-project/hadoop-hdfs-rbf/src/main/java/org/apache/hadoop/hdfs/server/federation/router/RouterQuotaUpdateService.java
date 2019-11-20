@@ -30,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.QuotaUsage;
+import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
 import org.apache.hadoop.hdfs.server.federation.store.MountTableStore;
@@ -251,12 +252,16 @@ public class RouterQuotaUpdateService extends PeriodicService {
    */
   private RouterQuotaUsage generateNewQuota(RouterQuotaUsage oldQuota,
       QuotaUsage currentQuotaUsage) {
-    RouterQuotaUsage newQuota = new RouterQuotaUsage.Builder()
+    RouterQuotaUsage.Builder newQuotaBuilder = new RouterQuotaUsage.Builder()
         .fileAndDirectoryCount(currentQuotaUsage.getFileAndDirectoryCount())
         .quota(oldQuota.getQuota())
         .spaceConsumed(currentQuotaUsage.getSpaceConsumed())
-        .spaceQuota(oldQuota.getSpaceQuota()).build();
-    return newQuota;
+        .spaceQuota(oldQuota.getSpaceQuota());
+    for (StorageType t : StorageType.values()) {
+      newQuotaBuilder.typeQuota(t, oldQuota.getTypeQuota(t));
+      newQuotaBuilder.typeConsumed(t, currentQuotaUsage.getTypeConsumed(t));
+    }
+    return newQuotaBuilder.build();
   }
 
   /**
