@@ -32,6 +32,7 @@ import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
@@ -82,6 +83,9 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import static org.apache.hadoop.hdfs.server.federation.router.Quota.consumeByType;
+import static org.apache.hadoop.hdfs.server.federation.router.Quota.orByType;
+import static org.apache.hadoop.hdfs.server.federation.router.Quota.andByByte;
 
 /**
  * This class provides some Federation administrative access shell commands.
@@ -124,10 +128,10 @@ public class RouterAdmin extends Configured implements Tool {
   private String getUsage(String cmd) {
     if (cmd == null) {
       String[] commands =
-          {"-add", "-update", "-rm", "-ls", "-getDestination",
-              "-setQuota", "-clrQuota",
+          { "-add", "-update", "-rm", "-ls", "-getDestination", "-setQuota",
+              "-setStorageTypeQuota", "-clrQuota", "-clrStorageTypeQuota",
               "-safemode", "-nameservice", "-getDisabledNameservices",
-              "-refresh", "-refreshRouterArgs"};
+              "-refresh", "-refreshRouterArgs" };
       StringBuilder usage = new StringBuilder();
       usage.append("Usage: hdfs dfsrouteradmin :\n");
       for (int i = 0; i < commands.length; i++) {
@@ -158,8 +162,13 @@ public class RouterAdmin extends Configured implements Tool {
     } else if (cmd.equals("-setQuota")) {
       return "\t[-setQuota <path> -nsQuota <nsQuota> -ssQuota "
           + "<quota in bytes or quota size string>]";
+    } else if (cmd.equals("-setStorageTypeQuota")) {
+      return "\t[-setStorageTypeQuota <path> -storageType <storagetype> "
+          + "<quota in bytes or quota size string>";
     } else if (cmd.equals("-clrQuota")) {
       return "\t[-clrQuota <path>]";
+    } else if (cmd.equals("-clrStorageTypeQuota")) {
+      return "\t[-clrStorageTypeQuota <path>]";
     } else if (cmd.equals("-safemode")) {
       return "\t[-safemode enter | leave | get]";
     } else if (cmd.equals("-nameservice")) {
@@ -233,7 +242,15 @@ public class RouterAdmin extends Configured implements Tool {
       if (argv.length < 4) {
         return false;
       }
+    } else if ("-setStorageTypeQuota".equals(cmd)) {
+      if (argv.length < 5) {
+        return false;
+      }
     } else if ("-clrQuota".equals(cmd)) {
+      if (argv.length < 2) {
+        return false;
+      }
+    } else if ("-clrStorageTypeQuota".equals(cmd)) {
       if (argv.length < 2) {
         return false;
       }
@@ -328,11 +345,24 @@ public class RouterAdmin extends Configured implements Tool {
           System.out.println(
               "Successfully set quota for mount point " + argv[i]);
         }
+      } else if ("-setStorageTypeQuota".equals(cmd)) {
+        if (setStorageTypeQuota(argv, i)) {
+          System.out.println(
+              "Successfully set storage type quota for mount point " + argv[i]);
+        }
       } else if ("-clrQuota".equals(cmd)) {
         while (i < argv.length) {
           if (clrQuota(argv[i])) {
             System.out
                 .println("Successfully clear quota for mount point " + argv[i]);
+            i++;
+          }
+        }
+      } else if ("-clrStorageTypeQuota".equals(cmd)) {
+        while (i < argv.length) {
+          if (clrStorageTypeQuota(argv[i])) {
+            System.out.println("Successfully clear storage type quota for mount"
+                + " point " + argv[i]);
             i++;
           }
         }
@@ -857,6 +887,40 @@ public class RouterAdmin extends Configured implements Tool {
   }
 
   /**
+   * Set storage type quota for a mount table entry.
+   *
+   * @param parameters Parameters of the quota.
+   * @param i Index in the parameters.
+   */
+  private boolean setStorageTypeQuota(String[] parameters, int i)
+      throws IOException {
+    long[] typeQuota = new long[StorageType.values().length];
+    consumeByType(t -> typeQuota[t.ordinal()] = HdfsConstants.QUOTA_DONT_SET);
+
+    String mount = parameters[i++];
+    if (parameters[i].equals("-storageType")) {
+      i++;
+      StorageType type = StorageType.parseStorageType(parameters[i++]);
+      typeQuota[type.ordinal()] = Long.parseLong(parameters[i]);
+    } else {
+      throw new IllegalArgumentException("Invalid argument : " + parameters[i]);
+    }
+
+    if (orByType(t -> typeQuota[t.ordinal()] <= 0)) {
+      throw new IllegalArgumentException(
+          "Input quota value should be a positive number.");
+    }
+
+    if (andByByte(
+        t -> typeQuota[t.ordinal()] == HdfsConstants.QUOTA_DONT_SET)) {
+      throw new IllegalArgumentException(
+          "Must specify at least one of -nsQuota and -ssQuota.");
+    }
+
+    return updateStorageTypeQuota(mount, typeQuota);
+  }
+
+  /**
    * Clear quota of the mount point.
    *
    * @param mount Mount table to clear
@@ -866,6 +930,19 @@ public class RouterAdmin extends Configured implements Tool {
   private boolean clrQuota(String mount) throws IOException {
     return updateQuota(mount, HdfsConstants.QUOTA_RESET,
         HdfsConstants.QUOTA_RESET);
+  }
+
+  /**
+   * Clear storage type quota of the mount point.
+   *
+   * @param mount Mount table to clear
+   * @return If the quota was cleared.
+   * @throws IOException Error clearing the mount point.
+   */
+  private boolean clrStorageTypeQuota(String mount) throws IOException {
+    long[] typeQuota = new long[StorageType.values().length];
+    consumeByType(t -> typeQuota[t.ordinal()] = HdfsConstants.QUOTA_RESET);
+    return updateStorageTypeQuota(mount, typeQuota);
   }
 
   /**
@@ -917,6 +994,62 @@ public class RouterAdmin extends Configured implements Tool {
       RouterQuotaUsage updatedQuota = new RouterQuotaUsage.Builder()
           .fileAndDirectoryCount(nsCount).quota(nsQuota)
           .spaceConsumed(ssCount).spaceQuota(ssQuota).build();
+      existingEntry.setQuota(updatedQuota);
+    }
+
+    UpdateMountTableEntryRequest updateRequest =
+        UpdateMountTableEntryRequest.newInstance(existingEntry);
+    UpdateMountTableEntryResponse updateResponse = mountTable
+        .updateMountTableEntry(updateRequest);
+    return updateResponse.getStatus();
+  }
+
+  /**
+   * Update storage type quota of specified mount table.
+   *
+   * @param mount Specified mount table to update.
+   * @param typeQuota Storage type quota.
+   * @return If the quota was updated.
+   * @throws IOException Error updating quota.
+   */
+  private boolean updateStorageTypeQuota(String mount, long[] typeQuota)
+      throws IOException {
+    // Get existing entry
+    MountTableManager mountTable = client.getMountTableManager();
+    GetMountTableEntriesRequest getRequest = GetMountTableEntriesRequest
+        .newInstance(mount);
+    GetMountTableEntriesResponse getResponse = mountTable
+        .getMountTableEntries(getRequest);
+    List<MountTable> results = getResponse.getEntries();
+    MountTable existingEntry = null;
+    for (MountTable result : results) {
+      if (mount.equals(result.getSourcePath())) {
+        existingEntry = result;
+        break;
+      }
+    }
+
+    if (existingEntry == null) {
+      throw new IOException(mount + " doesn't exist in mount table.");
+    } else {
+      final RouterQuotaUsage quotaUsage = existingEntry.getQuota();
+      long[] typeCount = new long[StorageType.values().length];
+      consumeByType(t -> typeCount[t.ordinal()] = quotaUsage.getTypeQuota(t));
+      // If all storage type quota were reset, clear the storage type quota.
+      if (andByByte(t -> typeQuota[t.ordinal()] == HdfsConstants.QUOTA_RESET)) {
+        consumeByType(t -> typeCount[t.ordinal()] =
+            RouterQuotaUsage.QUOTA_USAGE_COUNT_DEFAULT);
+      } else {
+        // If nsQuota or ssQuota was unset, use the value in mount table.
+        consumeByType(t -> {
+          if (typeQuota[t.ordinal()] == HdfsConstants.QUOTA_DONT_SET) {
+            typeQuota[t.ordinal()] = quotaUsage.getTypeQuota(t);
+          }
+        });
+      }
+
+      RouterQuotaUsage updatedQuota = new RouterQuotaUsage.Builder()
+          .typeQuota(typeQuota).typeConsumed(typeCount).build();
       existingEntry.setQuota(updatedQuota);
     }
 

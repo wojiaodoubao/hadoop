@@ -325,7 +325,7 @@ public class Quota {
   /**
    * Call consumer by storage type.
    */
-  private void consumeByType(Consumer<StorageType> consumer) {
+  public static void consumeByType(Consumer<StorageType> consumer) {
     for (StorageType type : StorageType.values()) {
       consumer.accept(type);
     }
@@ -334,10 +334,18 @@ public class Quota {
   /**
    * Do or compute of all results by storage type.
    */
-  private boolean orByType(Predicate<StorageType> predicate) {
+  public static boolean orByType(Predicate<StorageType> predicate) {
     boolean res = false;
     for (StorageType type : StorageType.values()) {
       res |= predicate.test(type);
+    }
+    return res;
+  }
+
+  public static boolean andByByte(Predicate<StorageType> predicate) {
+    boolean res = false;
+    for (StorageType type : StorageType.values()) {
+      res &= predicate.test(type);
     }
     return res;
   }

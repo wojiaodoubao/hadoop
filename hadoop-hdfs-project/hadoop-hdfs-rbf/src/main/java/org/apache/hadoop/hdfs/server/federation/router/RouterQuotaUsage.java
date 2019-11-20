@@ -68,6 +68,18 @@ public final class RouterQuotaUsage extends QuotaUsage {
       super.spaceQuota(spaceQuota);
       return this;
     }
+
+    @Override
+    public Builder typeConsumed(long[] typeConsumed) {
+      super.typeConsumed(typeConsumed);
+      return this;
+    }
+
+    @Override
+    public Builder typeQuota(long[] typeQuota) {
+      super.typeQuota(typeQuota);
+      return this;
+    }
   }
 
   /**

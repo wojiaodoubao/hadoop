@@ -32,6 +32,7 @@ import java.util.Set;
 import com.google.common.base.Preconditions;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
@@ -85,6 +86,8 @@ import org.apache.hadoop.ipc.protocolPB.GenericRefreshProtocolServerSideTranslat
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.AbstractService;
+import static org.apache.hadoop.hdfs.server.federation.router.Quota.consumeByType;
+import static org.apache.hadoop.hdfs.server.federation.router.Quota.orByType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -279,11 +282,23 @@ public class RouterAdminServer extends AbstractService
     UpdateMountTableEntryResponse response = getMountTableStore()
         .updateMountTableEntry(request);
     try {
-      if (updateEntry != null && router.isQuotaEnabled()
-          && isQuotaUpdated(request, oldEntry)) {
-        synchronizeQuota(updateEntry.getSourcePath(),
-            updateEntry.getQuota().getQuota(),
-            updateEntry.getQuota().getSpaceQuota());
+      if (updateEntry != null && router.isQuotaEnabled()) {
+        if (isQuotaUpdated(request, oldEntry)) {
+          synchronizeQuota(updateEntry.getSourcePath(),
+              updateEntry.getQuota().getQuota(),
+              updateEntry.getQuota().getSpaceQuota(), null);
+        }
+        RouterQuotaUsage oldQuota = oldEntry.getQuota();
+        RouterQuotaUsage newQuota = request.getEntry().getQuota();
+        boolean locationsChanged = oldEntry != null &&
+            !oldEntry.getDestinations().equals(updateEntry.getDestinations());
+        for (StorageType t : StorageType.values()) {
+          if (locationsChanged || oldQuota.getTypeQuota(t) != newQuota
+              .getTypeQuota(t)) {
+            synchronizeQuota(updateEntry.getSourcePath(), 0L,
+                newQuota.getTypeQuota(t), t);
+          }
+        }
       }
     } catch (Exception e) {
       // Ignore exception, if any while reseting quota. Specifically to handle
@@ -332,14 +347,16 @@ public class RouterAdminServer extends AbstractService
   }
 
   /**
+   * TODO: 支持type
    * Synchronize the quota value across mount table and subclusters.
    * @param path Source path in given mount table.
    * @param nsQuota Name quota definition in given mount table.
    * @param ssQuota Space quota definition in given mount table.
+   * @param type Storage type of quota. Null if it's not a storage type quota.
    * @throws IOException
    */
-  private void synchronizeQuota(String path, long nsQuota, long ssQuota)
-      throws IOException {
+  private void synchronizeQuota(String path, long nsQuota, long ssQuota,
+      StorageType type) throws IOException {
     if (isQuotaSyncRequired(nsQuota, ssQuota)) {
       if (iStateStoreCache) {
         ((StateStoreCache) this.router.getSubclusterResolver()).loadCache(true);
@@ -372,7 +389,7 @@ public class RouterAdminServer extends AbstractService
     // clear sub-cluster's quota definition
     try {
       synchronizeQuota(request.getSrcPath(), HdfsConstants.QUOTA_RESET,
-          HdfsConstants.QUOTA_RESET);
+          HdfsConstants.QUOTA_RESET, null);
     } catch (Exception e) {
       // Ignore exception, if any while reseting quota. Specifically to handle
       // if the actual destination doesn't exist.
