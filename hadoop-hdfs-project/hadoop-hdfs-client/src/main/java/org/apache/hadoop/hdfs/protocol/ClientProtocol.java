@@ -1856,4 +1856,29 @@ public interface ClientProtocol {
    */
   @AtMostOnce
   void satisfyStoragePolicy(String path) throws IOException;
+
+  /**
+   * Serialize and write out path to remote storage.
+   *
+   * @param path Path of an existing file/directory.
+   * @return the unique id identifying the saved path.
+   * @throws org.apache.hadoop.fs.UnresolvedLinkException if <code>src</code>
+   *           contains a symlink.
+   * @throws java.io.FileNotFoundException If file/dir <code>src</code> is not
+   *           found.
+   * [TODO:如果是加密区，也应该抛出异常吧？]
+   */
+  @Idempotent
+  @ReadOnly(activeOnly = true)
+  public String saveTree(String path) throws IOException;
+
+  /**
+   * Deserialize and construct path from remote storage.
+   *
+   * @param path the path being constructed.
+   * @param uid the unique id of the saved path.
+   * @return true if succeed, otherwise false.
+   */
+  @AtMostOnce
+  public boolean graftTree(String path, String uid) throws IOException;
 }

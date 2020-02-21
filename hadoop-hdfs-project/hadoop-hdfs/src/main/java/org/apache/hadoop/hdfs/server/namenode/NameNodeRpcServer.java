@@ -1495,6 +1495,17 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   }
 
   @Override // ClientProtocol
+  public String saveTree(String path) throws IOException {
+    return null;
+  }
+
+  @Override // ClientProtocol
+  public boolean graftTree(String path, String uid)
+      throws IOException {
+    return false;
+  }
+
+  @Override // ClientProtocol
   public void setQuota(String path, long namespaceQuota, long storagespaceQuota,
                        StorageType type)
       throws IOException {

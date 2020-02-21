@@ -1349,6 +1349,17 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
     clientProto.satisfyStoragePolicy(path);
   }
 
+  @Override // ClientProtocol
+  public String saveTree(String path) throws IOException {
+    return null;// TODO:Finish this.
+  }
+
+  @Override // ClientProtocol
+  public boolean graftTree(String path, String uid)
+      throws IOException {
+    return false;// TODO:Finish this.
+  }
+
   @Override // NamenodeProtocol
   public BlocksWithLocations getBlocks(DatanodeInfo datanode, long size,
       long minBlockSize) throws IOException {

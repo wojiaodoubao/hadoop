@@ -1768,6 +1768,17 @@ public class RouterClientProtocol implements ClientProtocol {
   }
 
   @Override
+  public String saveTree(String path) throws IOException {
+    return null;// TODO:Finish this.
+  }
+
+  @Override
+  public boolean graftTree(String path, String uid)
+      throws IOException {
+    return false;// TODO:Finish this.
+  }
+
+  @Override
   public HAServiceProtocol.HAServiceState getHAServiceState()
       throws IOException {
     rpcServer.checkOperation(NameNode.OperationCategory.READ, false);

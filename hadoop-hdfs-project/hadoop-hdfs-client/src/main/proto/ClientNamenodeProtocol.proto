@@ -850,6 +850,23 @@ message MsyncRequestProto {
 message MsyncResponseProto {
 }
 
+message SaveTreeRequestProto {
+  optional string path = 1;
+}
+
+message SaveTreeResponseProto {
+  optional string uid = 1;
+}
+
+message GraftTreeRequestProto {
+  optional string path = 1;
+  optional string uid = 2;
+}
+
+message GraftTreeResponseProto {
+  optional bool result = 1;
+}
+
 message SatisfyStoragePolicyRequestProto {
   required string src = 1;
 }
@@ -1056,6 +1073,10 @@ service ClientNamenodeProtocol {
       returns(ListOpenFilesResponseProto);
   rpc msync(MsyncRequestProto)
       returns(MsyncResponseProto);
+  rpc saveTree(SaveTreeRequestProto)
+      returns(SaveTreeResponseProto);
+  rpc graftTree(GraftTreeRequestProto)
+      returns(GraftTreeResponseProto);
   rpc satisfyStoragePolicy(SatisfyStoragePolicyRequestProto)
       returns(SatisfyStoragePolicyResponseProto);
   rpc getHAServiceState(HAServiceStateRequestProto)
