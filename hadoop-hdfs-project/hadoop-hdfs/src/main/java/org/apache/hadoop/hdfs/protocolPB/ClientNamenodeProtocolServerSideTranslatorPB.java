@@ -245,6 +245,10 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SaveTr
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SaveTreeResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GraftTreeRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GraftTreeResponseProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SaveTreeRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SaveTreeResponseProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GraftTreeRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GraftTreeResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.EncryptionZonesProtos.CreateEncryptionZoneResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.EncryptionZonesProtos.CreateEncryptionZoneRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.EncryptionZonesProtos.GetEZForPathResponseProto;
@@ -1997,14 +2001,24 @@ public class ClientNamenodeProtocolServerSideTranslatorPB implements
 
   @Override
   public SaveTreeResponseProto saveTree(RpcController controller,
-      SaveTreeRequestProto request) throws ServiceException {
-    return null;
+      SaveTreeRequestProto req) throws ServiceException {
+    try {
+      String uid = server.saveTree(req.getPath());
+      return SaveTreeResponseProto.newBuilder().setUid(uid).build();
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
   }
 
   @Override
   public GraftTreeResponseProto graftTree(RpcController controller,
-      GraftTreeRequestProto request) throws ServiceException {
-    return null;
+      GraftTreeRequestProto req) throws ServiceException {
+    try {
+      boolean result = server.graftTree(req.getPath(), req.getUid());
+      return GraftTreeResponseProto.newBuilder().setResult(result).build();
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
   }
 
   @Override

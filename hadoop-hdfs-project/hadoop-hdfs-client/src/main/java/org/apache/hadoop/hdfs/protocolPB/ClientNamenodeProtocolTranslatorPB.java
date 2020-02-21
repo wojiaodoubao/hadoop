@@ -198,6 +198,10 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.Update
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.UpgradeStatusRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.UpgradeStatusResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SatisfyStoragePolicyRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SaveTreeRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.SaveTreeResponseProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GraftTreeRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GraftTreeResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.*;
 import org.apache.hadoop.hdfs.protocol.proto.EncryptionZonesProtos.CreateEncryptionZoneRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.EncryptionZonesProtos.EncryptionZoneProto;
@@ -2047,13 +2051,27 @@ public class ClientNamenodeProtocolTranslatorPB implements
 
   @Override
   public String saveTree(String path) throws IOException {
-    return null;// TODO:Finish this.
+    SaveTreeRequestProto req =
+        SaveTreeRequestProto.newBuilder().setPath(path).build();
+    try {
+      SaveTreeResponseProto proto = rpcProxy.saveTree(null, req);
+      return proto.getUid();
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
   }
 
   @Override
   public boolean graftTree(String path, String uid)
       throws IOException {
-    return false;// TODO:Finish this.
+    GraftTreeRequestProto req =
+        GraftTreeRequestProto.newBuilder().setPath(path).setUid(uid).build();
+    try {
+      GraftTreeResponseProto proto = rpcProxy.graftTree(null, req);
+      return proto.getResult();
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
   }
 
   @Override
