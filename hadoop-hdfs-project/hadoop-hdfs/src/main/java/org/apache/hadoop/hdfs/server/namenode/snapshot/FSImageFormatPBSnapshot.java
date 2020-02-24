@@ -450,8 +450,7 @@ public class FSImageFormatPBSnapshot {
           Root sroot = s.getRoot();
           SnapshotSection.Snapshot.Builder sb = SnapshotSection.Snapshot
               .newBuilder().setSnapshotId(s.getId());
-          INodeSection.INodeDirectory.Builder db = buildINodeDirectory(sroot,
-              parent.getSaverContext());
+          INodeSection.INodeDirectory.Builder db = buildINodeDirectory(sroot);
           INodeSection.INode r = INodeSection.INode.newBuilder()
               .setId(sroot.getId())
               .setType(INodeSection.INode.Type.DIRECTORY)
@@ -561,7 +560,7 @@ public class FSImageFormatPBSnapshot {
           INodeFileAttributes copy = diff.snapshotINode;
           if (copy != null) {
             fb.setName(ByteString.copyFrom(copy.getLocalNameBytes()))
-                .setSnapshotCopy(buildINodeFile(copy, parent.getSaverContext()));
+                .setSnapshotCopy(buildINodeFile(copy));
           }
           fb.build().writeDelimitedTo(out);
         }
@@ -597,8 +596,7 @@ public class FSImageFormatPBSnapshot {
           INodeDirectoryAttributes copy = diff.snapshotINode;
           if (!diff.isSnapshotRoot() && copy != null) {
             db.setName(ByteString.copyFrom(copy.getLocalNameBytes()))
-                .setSnapshotCopy(
-                    buildINodeDirectory(copy, parent.getSaverContext()));
+                .setSnapshotCopy(buildINodeDirectory(copy));
           }
           // process created list and deleted list
           List<INode> created = diff.getChildrenDiff().getCreatedUnmodifiable();

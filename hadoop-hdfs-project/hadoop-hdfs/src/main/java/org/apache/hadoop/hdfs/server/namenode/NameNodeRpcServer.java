@@ -1496,7 +1496,9 @@ public class NameNodeRpcServer implements NamenodeProtocols {
 
   @Override // ClientProtocol
   public String saveTree(String path) throws IOException {
-    return null;
+    checkNNStartup();
+    metrics.incrFileInfoOps();
+    return namesystem.saveTree(path);
   }
 
   @Override // ClientProtocol

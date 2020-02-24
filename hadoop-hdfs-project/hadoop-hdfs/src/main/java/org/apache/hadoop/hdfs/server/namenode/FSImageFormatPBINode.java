@@ -636,7 +636,7 @@ public final class FSImageFormatPBINode {
     }
 
     public static INodeSection.INodeFile.Builder buildINodeFile(
-        INodeFileAttributes file, final SaverContext state) {
+        INodeFileAttributes file) {
       INodeSection.INodeFile.Builder b = INodeSection.INodeFile.newBuilder()
           .setAccessTime(file.getAccessTime())
           .setModificationTime(file.getModificationTime())
@@ -663,7 +663,7 @@ public final class FSImageFormatPBINode {
     }
 
     public static INodeSection.INodeDirectory.Builder buildINodeDirectory(
-        INodeDirectoryAttributes dir, final SaverContext state) {
+        INodeDirectoryAttributes dir) {
       QuotaCounts quota = dir.getQuotaCounts();
       INodeSection.INodeDirectory.Builder b = INodeSection.INodeDirectory
           .newBuilder().setModificationTime(dir.getModificationTime())
@@ -811,7 +811,7 @@ public final class FSImageFormatPBINode {
           FSImageFormatProtobuf.SectionName.FILES_UNDERCONSTRUCTION);
     }
 
-    private void save(OutputStream out, INode n) throws IOException {
+    static void save(OutputStream out, INode n) throws IOException {
       if (n.isDirectory()) {
         save(out, n.asDirectory());
       } else if (n.isFile()) {
@@ -821,17 +821,15 @@ public final class FSImageFormatPBINode {
       }
     }
 
-    private void save(OutputStream out, INodeDirectory n) throws IOException {
-      INodeSection.INodeDirectory.Builder b = buildINodeDirectory(n,
-          parent.getSaverContext());
+    private static void save(OutputStream out, INodeDirectory n) throws IOException {
+      INodeSection.INodeDirectory.Builder b = buildINodeDirectory(n);
       INodeSection.INode r = buildINodeCommon(n)
           .setType(INodeSection.INode.Type.DIRECTORY).setDirectory(b).build();
       r.writeDelimitedTo(out);
     }
 
-    private void save(OutputStream out, INodeFile n) throws IOException {
-      INodeSection.INodeFile.Builder b = buildINodeFile(n,
-          parent.getSaverContext());
+    private static void save(OutputStream out, INodeFile n) throws IOException {
+      INodeSection.INodeFile.Builder b = buildINodeFile(n);
       BlockInfo[] blocks = n.getBlocks();
 
       if (blocks != null) {
@@ -854,7 +852,7 @@ public final class FSImageFormatPBINode {
       r.writeDelimitedTo(out);
     }
 
-    private void save(OutputStream out, INodeSymlink n) throws IOException {
+    private static void save(OutputStream out, INodeSymlink n) throws IOException {
       INodeSection.INodeSymlink.Builder b = INodeSection.INodeSymlink
           .newBuilder()
           .setPermission(buildPermissionStatus(n))
@@ -867,7 +865,7 @@ public final class FSImageFormatPBINode {
       r.writeDelimitedTo(out);
     }
 
-    private INodeSection.INode.Builder buildINodeCommon(INode n) {
+    private static INodeSection.INode.Builder buildINodeCommon(INode n) {
       return INodeSection.INode.newBuilder()
           .setId(n.getId())
           .setName(ByteString.copyFrom(n.getLocalNameBytes()));

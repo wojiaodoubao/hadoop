@@ -59,6 +59,7 @@ public class NameNodeMetrics {
   @Metric MutableCounterLong createSymlinkOps;
   @Metric MutableCounterLong getLinkTargetOps;
   @Metric MutableCounterLong filesInGetListingOps;
+  @Metric MutableCounterLong saveTreeOps;
   @Metric ("Number of successful re-replications")
   MutableCounterLong successfulReReplications;
   @Metric ("Number of times we failed to schedule a block re-replication.")
@@ -107,7 +108,8 @@ public class NameNodeMetrics {
       renameSnapshotOps.value() +
       listSnapshottableDirOps.value() +
       createSymlinkOps.value() +
-      snapshotDiffReportOps.value();
+      snapshotDiffReportOps.value() +
+      saveTreeOps.value();
   }
 
 
@@ -286,6 +288,10 @@ public class NameNodeMetrics {
 
   public void incrFileInfoOps() {
     fileInfoOps.incr();
+  }
+
+  public void incrSaveTreeOps() {
+    saveTreeOps.incr();
   }
 
   public void incrCreateSymlinkOps() {

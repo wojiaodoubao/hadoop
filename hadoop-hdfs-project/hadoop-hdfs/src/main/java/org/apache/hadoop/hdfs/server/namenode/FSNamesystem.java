@@ -134,7 +134,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.file.Files;
-import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -8496,6 +8495,19 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         NameNodeLayoutVersion.Feature.ERASURE_CODING,
         getEffectiveLayoutVersion())) {
       throw new UnsupportedActionException(operationName + " not supported.");
+    }
+  }
+
+  public String saveTree(String path) throws IOException {
+    checkOperation(OperationCategory.WRITE);// only the active can save.
+    checkSuperuserPrivilege();// only the super user can save the path.
+    try {
+      checkOperation(OperationCategory.WRITE);
+      checkNameNodeSafeMode("Cannot saveTree() of path=" + path);
+      return FederationRenameOp.unprotectedSaveSubTree(this, path);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, "saveTree", path);
+      throw e;
     }
   }
 }
