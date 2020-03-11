@@ -6,7 +6,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.io.Text;
+import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.Time;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -15,14 +15,10 @@ import java.io.*;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.apache.hadoop.hdfs.server.namenode.procedure.Job.NEXT_PROCEDURE_NONE;
 import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.SCHEDULER_BASE_URI;
 import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.WORK_THREAD_NUM;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 public class TestProcedureScheduler {
 
@@ -52,78 +48,75 @@ public class TestProcedureScheduler {
   }
 
   @Test(timeout = 30000)
-  public void testStartStopJobScheduler()
+  public void testShutdownScheduler()
       throws IOException, URISyntaxException, InterruptedException {
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
-
+    scheduler.init();
     // construct job
     Job.Builder builder = new Job.Builder<>();
-    builder.nextProcedure(new WaitProcedure("WAIT_TASK", 1000L, 30 * 1000));
+    builder.nextProcedure(new WaitProcedure("WAIT", 1000, 30 * 1000));
     Job job = builder.build();
 
     scheduler.submit(job);
     Thread.sleep(1000);// wait job to be scheduled.
     scheduler.shutDown();
+    scheduler.waitUntilDone(job);
+    GenericTestUtils
+        .assertExceptionContains("Scheduler is shutdown", job.error());
   }
 
-//  @Test
-//  public void testRunAJob() throws Exception {
-//    JobScheduler scheduler = new JobScheduler();
-//    scheduler.init(CONF);
-//    try {
-//      // construct job
-//      ArrayList<Task> tasks = new ArrayList<>();
-//      for (int i = 0; i < 5; i++) {
-//        tasks.add(new RecordTask("TASK_" + i, "TASK_" + (i + 1), 1000L));
-//      }
-//      final RecordContext jcontext = new RecordContext(tasks.get(0).getName());
-//      Job job = new Job(jcontext, tasks);
-//
-//      scheduler.schedule(job);
-//      while (!job.isJobDone()) {
-//        try {
-//          job.waitJobDone();
-//        } catch (InterruptedException e) {
-//        }
-//      }
-//
-//      List<Task> finished = jcontext.getFinishTasks();
-//      assertEquals(tasks.size(), finished.size());
-//      for (int i = 0; i < tasks.size(); i++) {
-//        assertEquals(tasks.get(i), finished.get(i));
-//      }
-//    } finally {
-//      scheduler.shutDown();
-//    }
-//  }
-//
-//  @Test
-//  public void testRetry() throws Exception {
-//    JobScheduler scheduler = new JobScheduler();
-//    scheduler.init(CONF);
-//    try {
-//      RetryTask retryTask =
-//          new RetryTask("RETRY_TASK", "DONE", 1000L, 3);
-//      ArrayList<Task> tasks = new ArrayList<>();
-//      tasks.add(retryTask);
-//      final RecordContext jcontext = new RecordContext(tasks.get(0).getName());
-//      Job job = new Job(jcontext, tasks);
-//      long start = Time.now();
-//      scheduler.schedule(job);
-//      job.waitJobDone();
-//      long duration = Time.now() - start;
-//
-//      List<Task> finished = jcontext.getFinishTasks();
-//      assertEquals(tasks.size(), finished.size());
-//      for (int i = 0; i < tasks.size(); i++) {
-//        assertEquals(tasks.get(i), finished.get(i));
-//      }
-//      assertEquals(true, duration > 1000 * 3);
-//      assertEquals(3, retryTask.getTotalRetry());
-//    } finally {
-//      scheduler.shutDown();
-//    }
-//  }
+  @Test(timeout = 30000)
+  public void testSuccessfulJob() throws Exception {
+    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    scheduler.init();
+    try {
+      // construct job
+      List<RecordProcedure> procedures = new ArrayList<>();
+      Job.Builder builder = new Job.Builder<RecordProcedure>();
+      for (int i = 0; i < 5; i++) {
+        RecordProcedure r = new RecordProcedure("RECORD_" + i, 1000L);
+        builder.nextProcedure(r);
+        procedures.add(r);
+      }
+      Job<RecordProcedure> job = builder.build();
+
+      scheduler.submit(job);
+      scheduler.waitUntilDone(job);
+      assertNull(job.error());
+      // verify finish list.
+      assertEquals(5, RecordProcedure.finish.size());
+      for (int i = 0; i < RecordProcedure.finish.size(); i++) {
+        assertEquals(procedures.get(i), RecordProcedure.finish.get(i));
+      }
+    } finally {
+      scheduler.shutDown();
+    }
+  }
+
+  @Test
+  public void testRetry() throws Exception {
+    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    scheduler.init();
+    try {
+      // construct job
+      Job.Builder builder = new Job.Builder<>();
+      RetryProcedure retryProcedure = new RetryProcedure("retry", 1000, 3);
+      builder.nextProcedure(retryProcedure);
+      Job job = builder.build();
+
+      long start = Time.now();
+      scheduler.submit(job);
+      scheduler.waitUntilDone(job);
+      assertNull(job.error());
+
+      long duration = Time.now() - start;
+      assertEquals(true, duration > 1000 * 3);
+      assertEquals(3, retryProcedure.getTotalRetry());
+    } finally {
+      scheduler.shutDown();
+    }
+  }
+}
 //
 //  @Test
 //  public void testJobSeDe() throws Exception {
@@ -265,55 +258,50 @@ public class TestProcedureScheduler {
 //        scheduler.getLatestContextLog(job));
 //  }
 //}
-//class RecordTask extends BasicTaskImpl<RecordContext> {
-//
-//  public RecordTask() {};
-//
-//  public RecordTask(String name, String nextTask, long delay) {
-//    super(name, nextTask, delay);
-//  }
-//
-//  @Override
-//  public RecordContext execute(RecordContext context)
-//      throws TaskRetryException {
-//    context = super.execute(context);
-//    context.taskDone(this);
-//    return context;
-//  }
-//}
-//class RetryTask extends BasicTaskImpl<RecordContext> {
-//
-//  public static volatile boolean FORCE_RETRY = false;
-//  private int retryTime = 1;
-//  private int totalRetry = 0;
-//
-//  public RetryTask() {}
-//
-//  public RetryTask(String name, String nextTask, long delay,
-//      int retryTime) {
-//    super(name, nextTask, delay);
-//    this.retryTime = retryTime;
-//  }
-//
-//  @Override
-//  public RecordContext execute(RecordContext context)
-//      throws TaskRetryException {
-//    if (retryTime > 0) {
-//      retryTime--;
-//      totalRetry++;
-//      throw new TaskRetryException();
-//    } else if (FORCE_RETRY) {
-//      totalRetry++;
-//      throw new TaskRetryException();
-//    }
-//    context.setNextTask(nextTask);
-//    context.taskDone(this);
-//    return context;
-//  }
-//
-//  public int getTotalRetry() {
-//    return totalRetry;
-//  }
+
+class RetryProcedure extends Procedure {
+
+  private int retryTime = 1;
+  private int totalRetry = 0;
+
+  public RetryProcedure() {}
+
+  public RetryProcedure(String name, long delay, int retryTime) {
+    super(name, delay);
+    this.retryTime = retryTime;
+  }
+
+  @Override
+  public void execute(Procedure lastProcedure) throws RetryException {
+    if (retryTime > 0) {
+      retryTime--;
+      totalRetry++;
+      throw new RetryException();
+    }
+  }
+
+  public int getTotalRetry() {
+    return totalRetry;
+  }
+}
+
+/**
+ * This procedure records all the finished procedures.
+ */
+class RecordProcedure extends Procedure<RecordProcedure> {
+
+  static List<RecordProcedure> finish = new ArrayList<>();
+
+  public RecordProcedure() {}
+
+  public RecordProcedure(String name, long delay) {
+    super(name, delay);
+  }
+
+  @Override
+  public void execute(RecordProcedure lastProcedure) throws RetryException {
+    finish.add(this);
+  }
 }
 
 /**
@@ -332,18 +320,15 @@ class WaitProcedure extends Procedure {
   }
 
   @Override
-  public void execute(Procedure lastProcedure) throws RetryException {
+  public void execute(Procedure lastProcedure) throws IOException {
     long startTime = Time.now();
     long timeLeft = waitTime;
     while (timeLeft > 0) {
       try {
         Thread.sleep(timeLeft);
       } catch (InterruptedException e) {
-        if (isActive()) {
-          timeLeft = Time.now() - startTime;
-        } else {
-          return;
-        }
+        verifySchedulerShutdown();
+        timeLeft = Time.now() - startTime;
       }
     }
   }

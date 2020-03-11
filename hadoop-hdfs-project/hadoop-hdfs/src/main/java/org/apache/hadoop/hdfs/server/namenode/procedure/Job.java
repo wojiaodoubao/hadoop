@@ -9,12 +9,18 @@ import org.slf4j.LoggerFactory;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.*;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.List;
+import java.util.ArrayList;
 
 public class Job<T extends Procedure> implements Writable {
   private String id;
   private ProcedureScheduler scheduler;
   private volatile boolean jobDone = false;
+  private Exception error;
   public static final Logger LOG = LoggerFactory.getLogger(Job.class.getName());
   private Map<String, T> procedureTable = new HashMap<>();
   private T firstProcedure;
@@ -42,11 +48,16 @@ public class Job<T extends Procedure> implements Writable {
             .setNextProcedure(procedure.name());
       }
       procedure.setNextProcedure(NEXT_PROCEDURE_NONE);
+      addProcedure(procedure);
       return this;
     }
 
     public Job build() throws IOException {
-      return new Job(procedures);
+      Job job = new Job(procedures);
+      for (Procedure<T> p : procedures) {
+        p.setJob(job);
+      }
+      return job;
     }
   }
 
@@ -65,27 +76,34 @@ public class Job<T extends Procedure> implements Writable {
         firstProcedure = p;
       }
     }
+    if (procedureTable.size() == 0) {
+      throw new IOException("Job doesn't contain any procedure.");
+    }
   }
 
   /**
    * Run the state machine.
    */
   public void execute() {
-    curProcedure = firstProcedure;
     while (!jobDone) {
       T lastProcedure = curProcedure;
-      curProcedure = next(curProcedure);
+      curProcedure = next();
       if (curProcedure == null) {
-        finish();
+        finish(null);
       } else {
         try {
           if (curProcedure == firstProcedure || lastProcedure != curProcedure) {
             LOG.info("Start procedure {}. The last procedure is {}",
-                curProcedure.name(), lastProcedure.name());
+                curProcedure.name(),
+                lastProcedure == null ? null : lastProcedure.name());
           }
           curProcedure.execute(lastProcedure);
         } catch (Procedure.RetryException tre) {
           scheduler.delay(this, curProcedure.delayMillisBeforeRetry());
+          curProcedure = lastProcedure;
+          return;
+        } catch (Exception e) {
+          finish(e);// This job is failed.
           return;
         }
         if (scheduler.writeJournal(this)) {
@@ -97,13 +115,19 @@ public class Job<T extends Procedure> implements Writable {
     }
   }
 
-  private T next(T procedure) {
-    return procedureTable.get(procedure.nextProcedure());
+  private T next() {
+    if (curProcedure == null) {
+      return firstProcedure;
+    } else {
+      return procedureTable.get(curProcedure.nextProcedure());
+    }
   }
 
-  private synchronized void finish() {
+  private synchronized void finish(Exception exception) {
+    assert !jobDone;
     if (scheduler.jobDone(this)) {
       jobDone = true;
+      error = exception;
       notifyAll();
     }
   }
@@ -120,10 +144,6 @@ public class Job<T extends Procedure> implements Writable {
     return this.id;
   }
 
-  public boolean isJobDone() {
-    return jobDone;
-  }
-
   public T getCurrentProcedure() {
     return curProcedure;
   }
@@ -132,12 +152,12 @@ public class Job<T extends Procedure> implements Writable {
     return firstProcedure;
   }
 
-  public void waitJobDone() throws InterruptedException {
-    synchronized (this) {
-      if (!jobDone) {
-        wait();
-      }
-    }
+  public boolean isJobDone() {
+    return jobDone;
+  }
+
+  public Exception error() {
+    return error;
   }
 
   @Override
@@ -148,6 +168,16 @@ public class Job<T extends Procedure> implements Writable {
     for (T p : procedureTable.values()) {
       Text.writeString(out, p.getClass().getName());
       p.write(out);
+    }
+    if (firstProcedure != null) {
+      Text.writeString(out, firstProcedure.name());
+    } else {
+      Text.writeString(out, NEXT_PROCEDURE_NONE);
+    }
+    if (curProcedure != null) {
+      Text.writeString(out, curProcedure.name());
+    } else {
+      Text.writeString(out, NEXT_PROCEDURE_NONE);
     }
   }
 
@@ -166,6 +196,18 @@ public class Job<T extends Procedure> implements Writable {
         LOG.error("Failed reading Procedure.", e);
         throw new IOException(e);
       }
+    }
+    String firstProcedureName = Text.readString(in);
+    if (firstProcedureName.equals(NEXT_PROCEDURE_NONE)) {
+      firstProcedure = null;
+    } else {
+      firstProcedure = procedureTable.get(firstProcedureName);
+    }
+    String currentProcedureName = Text.readString(in);
+    if (currentProcedureName.equals(NEXT_PROCEDURE_NONE)) {
+      currentProcedureName = null;
+    } else {
+      curProcedure = procedureTable.get(currentProcedureName);
     }
   }
 
@@ -196,5 +238,9 @@ public class Job<T extends Procedure> implements Writable {
     }
     return String.format("id=%s, firstProcedure=", id,
         firstProcedure.name() + "-" + firstProcedure.getClass());
+  }
+
+  public boolean isSchedulerShutdown() {
+    return !scheduler.isRunning();
   }
 }

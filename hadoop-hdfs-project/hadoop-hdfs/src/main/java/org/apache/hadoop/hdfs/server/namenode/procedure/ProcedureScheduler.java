@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -43,8 +44,8 @@ import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKe
  *   final JobContext context = new JobContext(tasks.get(0).getName());
  *   Job job = new Job(context, tasks);
  *
- *   JobScheduler scheduler = new JobScheduler();
- *   scheduler.init(CONF);
+ *   JobScheduler scheduler = new JobScheduler(CONF);
+ *   scheduler.init();
  */
 public class ProcedureScheduler {
   public static final Logger LOG =
@@ -60,18 +61,19 @@ public class ProcedureScheduler {
   private ThreadPoolExecutor workersPool;
   private Thread rooster;
   private Thread recoverThread;
-  volatile boolean running;
+  private AtomicBoolean running = new AtomicBoolean(true);
 
-  public ProcedureScheduler(Configuration conf)
-      throws URISyntaxException, IOException {
+  public ProcedureScheduler(Configuration conf) {
     this.conf = conf;
+  }
+
+  public synchronized void init() throws URISyntaxException, IOException {
     this.runningQueue = new LinkedBlockingQueue<>();
     this.delayQueue = new DelayQueue<>();
     this.recoverQueue = new LinkedBlockingQueue<>();
     this.jobSet = new ConcurrentHashMap<>();
 
     // start threads.
-    this.running = true;
     this.rooster = new Rooster();
     this.rooster.setDaemon(true);
     rooster.start();
@@ -93,20 +95,38 @@ public class ProcedureScheduler {
   /**
    * Submit the job.
    */
-  public synchronized boolean submit(Job job) {
+  public synchronized void submit(Job job) throws IOException {
+    if (!running.get()) {
+      throw new IOException("Scheduler is shutdown.");
+    }
     String jobId = allocateJobId();
     job.setId(jobId);
     job.setScheduler(this);
-    try {
-      journal.saveJob(job);
-    } catch (IOException e) {
-      LOG.warn("Submit job failed. job={}", job);
-      return false;
-    }
+    journal.saveJob(job);
     jobSet.put(job, job);
     runningQueue.add(job);
     LOG.info("Add new job={}", job);
-    return true;
+  }
+
+
+  /**
+   * Wait permanently until the job is done.
+   */
+  public void waitUntilDone(Job job) throws IOException {
+    if (job.isJobDone()) {
+      return;
+    }
+    if (!jobSet.keySet().contains(job)) {
+      throw new IOException("Job has not been submitted.");
+    }
+    synchronized (job) {
+      while (!job.isJobDone()) {
+        try {
+          job.wait();
+        } catch (InterruptedException e) {
+        }
+      }
+    }
   }
 
   /**
@@ -142,11 +162,18 @@ public class ProcedureScheduler {
     }
   }
 
+  public boolean isRunning() {
+    return running.get();
+  }
+
   /**
    * Shutdown scheduler.
    */
   public synchronized void shutDown() {
-    running = false;
+    if (!running.get()) {
+      return;
+    }
+    running.set(false);
     reader.interrupt();
     rooster.interrupt();
     recoverThread.interrupt();
@@ -208,7 +235,7 @@ public class ProcedureScheduler {
   class Rooster extends Thread {
     @Override
     public void run() {
-      while (running) {
+      while (running.get()) {
         try {
           DelayWrapper dJob = delayQueue.take();
           runningQueue.add(dJob.job);
@@ -223,14 +250,27 @@ public class ProcedureScheduler {
   class Reader extends Thread {
     @Override
     public void run() {
-      while (running) {
+      while (running.get()) {
         try {
           final Job job = runningQueue.take();
           workersPool.submit(() -> {
             LOG.info("Start job. job=", job);
             job.execute();
-            LOG.info("Job done. job=", job);
-            return null;
+            if (job.isJobDone()) {
+              if (job.error() == null) {
+                LOG.info("Job done. job=" + job.getId());
+              } else {
+                LOG.warn("Job failed. job=" + job.getId(), job.error());
+              }
+            } else {
+              if (job.error() != null) {
+                LOG.info("Will retry or recover. job=" + job.getId(),
+                    job.error());
+              } else {
+                LOG.info("Will retry or recover. job=" + job.getId());
+              }
+            }
+            return;
           });
         } catch (InterruptedException e) {
           // ignore interrupt exception.
@@ -242,7 +282,7 @@ public class ProcedureScheduler {
   class Recover extends Thread {
     @Override
     public void run() {
-      while (running) {
+      while (running.get()) {
         Job job = null;
         try {
           job = recoverQueue.take();
