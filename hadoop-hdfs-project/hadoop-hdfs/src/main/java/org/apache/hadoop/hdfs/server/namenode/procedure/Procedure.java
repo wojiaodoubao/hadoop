@@ -42,10 +42,11 @@ public abstract class Procedure<T extends Procedure> implements Writable {
    * shut down.
    *
    * @param lastProcedure the last procedure.
-   * @throws RetryException if this procedure needs retry.
-   * @return the name of the next task.
+   * @throws RetryException if this procedure needs delay a while then retry.
+   * @return true if the procedure has done and the job will go to the next
+   *         procedure, otherwise false.
    */
-  public abstract void execute(T lastProcedure)
+  public abstract boolean execute(T lastProcedure)
       throws RetryException, IOException;
 
   /**
@@ -102,6 +103,24 @@ public abstract class Procedure<T extends Procedure> implements Writable {
     LongWritable delayWritable = new LongWritable();
     delayWritable.readFields(in);
     return delayWritable.get();
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (obj instanceof Procedure) {
+      Procedure p = (Procedure) obj;
+      return isEquals(nextProcedure, p.nextProcedure) && isEquals(name, p.name)
+          && delayDuration == p.delayDuration;
+    }
+    return false;
+  }
+
+  private boolean isEquals(Object a, Object b) {
+    if (a == null) {
+      return b == null;
+    } else {
+      return a.equals(b);
+    }
   }
 
   public static class RetryException extends Exception {

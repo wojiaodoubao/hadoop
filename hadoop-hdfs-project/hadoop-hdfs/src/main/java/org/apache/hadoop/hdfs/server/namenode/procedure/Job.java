@@ -25,6 +25,7 @@ public class Job<T extends Procedure> implements Writable {
   private Map<String, T> procedureTable = new HashMap<>();
   private T firstProcedure;
   private T curProcedure;
+  private T lastProcedure;
 
   public static String NEXT_PROCEDURE_NONE = "NONE";
   static Set<String> RESERVED_NAME = new HashSet<>();
@@ -76,18 +77,15 @@ public class Job<T extends Procedure> implements Writable {
         firstProcedure = p;
       }
     }
-    if (procedureTable.size() == 0) {
-      throw new IOException("Job doesn't contain any procedure.");
-    }
+    lastProcedure = null;
+    curProcedure = firstProcedure;
   }
 
   /**
    * Run the state machine.
    */
   public void execute() {
-    while (!jobDone) {
-      T lastProcedure = curProcedure;
-      curProcedure = next();
+    while (!jobDone && scheduler.isRunning()) {
       if (curProcedure == null) {
         finish(null);
       } else {
@@ -97,10 +95,12 @@ public class Job<T extends Procedure> implements Writable {
                 curProcedure.name(),
                 lastProcedure == null ? null : lastProcedure.name());
           }
-          curProcedure.execute(lastProcedure);
+          if (curProcedure.execute(lastProcedure)) {
+            lastProcedure = curProcedure;
+            curProcedure = next();
+          }
         } catch (Procedure.RetryException tre) {
           scheduler.delay(this, curProcedure.delayMillisBeforeRetry());
-          curProcedure = lastProcedure;
           return;
         } catch (Exception e) {
           finish(e);// This job is failed.
@@ -109,6 +109,7 @@ public class Job<T extends Procedure> implements Writable {
         if (scheduler.writeJournal(this)) {
           continue;
         } else {
+          scheduler.shutDown();
           return;
         }
       }
@@ -179,6 +180,11 @@ public class Job<T extends Procedure> implements Writable {
     } else {
       Text.writeString(out, NEXT_PROCEDURE_NONE);
     }
+    if (lastProcedure != null) {
+      Text.writeString(out, lastProcedure.name());
+    } else {
+      Text.writeString(out, NEXT_PROCEDURE_NONE);
+    }
   }
 
   @Override
@@ -205,9 +211,15 @@ public class Job<T extends Procedure> implements Writable {
     }
     String currentProcedureName = Text.readString(in);
     if (currentProcedureName.equals(NEXT_PROCEDURE_NONE)) {
-      currentProcedureName = null;
+      curProcedure = null;
     } else {
       curProcedure = procedureTable.get(currentProcedureName);
+    }
+    String lastProcedureName = Text.readString(in);
+    if (lastProcedureName.equals(NEXT_PROCEDURE_NONE)) {
+      lastProcedure = null;
+    } else {
+      lastProcedure = procedureTable.get(currentProcedureName);
     }
   }
 

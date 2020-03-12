@@ -15,6 +15,7 @@ import java.io.*;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.SCHEDULER_BASE_URI;
 import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.WORK_THREAD_NUM;
@@ -59,7 +60,7 @@ public class TestProcedureScheduler {
 
     scheduler.submit(job);
     Thread.sleep(1000);// wait job to be scheduled.
-    scheduler.shutDown();
+    scheduler.shutDownAndWait(2);
     scheduler.waitUntilDone(job);
     GenericTestUtils
         .assertExceptionContains("Scheduler is shutdown", job.error());
@@ -89,7 +90,7 @@ public class TestProcedureScheduler {
         assertEquals(procedures.get(i), RecordProcedure.finish.get(i));
       }
     } finally {
-      scheduler.shutDown();
+      scheduler.shutDownAndWait(2);
     }
   }
 
@@ -113,74 +114,68 @@ public class TestProcedureScheduler {
       assertEquals(true, duration > 1000 * 3);
       assertEquals(3, retryProcedure.getTotalRetry());
     } finally {
-      scheduler.shutDown();
+      scheduler.shutDownAndWait(2);
     }
   }
+
+  @Test
+  public void testEmptyJob() throws Exception {
+    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    scheduler.init();
+    Job job = new Job.Builder<>().build();
+    scheduler.submit(job);
+    scheduler.waitUntilDone(job);
+  }
+
+  @Test
+  public void testJobSerializeAndDeserialize() throws Exception {
+    Job.Builder builder = new Job.Builder<RecordProcedure>();
+    for (int i = 0; i < 5; i++) {
+      RecordProcedure r = new RecordProcedure("record-" + i, 1000L);
+      builder.nextProcedure(r);
+    }
+    builder.nextProcedure(new RetryProcedure("retry", 1000, 3));
+    Job<RecordProcedure> job = builder.build();
+    job.setId(ProcedureScheduler.allocateJobId());
+    // Serialize.
+    ByteArrayOutputStream bao = new ByteArrayOutputStream();
+    job.write(new DataOutputStream(bao));
+    bao.flush();
+    ByteArrayInputStream bai = new ByteArrayInputStream(bao.toByteArray());
+    // Deserialize.
+    Job newJob = new Job.Builder<>().build();
+    newJob.readFields(new DataInputStream(bai));
+    assertEquals(job, newJob);
+  }
+
+  @Test
+  public void testSchedulerDownAndRecoverJob() throws Exception {
+    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    scheduler.init();
+
+    // construct job
+    Job.Builder builder = new Job.Builder<>();
+    MultiPhaseProcedure multiPhaseProcedure =
+        new MultiPhaseProcedure("retry", 1000, 10);
+    builder.addProcedure(multiPhaseProcedure);
+    Job job = builder.build();
+
+    scheduler.submit(job);
+    Thread.sleep(500);// wait procedure to be scheduled.
+    scheduler.shutDownAndWait(2);
+
+    int before = MultiPhaseProcedure.getCounter();
+    MultiPhaseProcedure.setCounter(0);
+    assertTrue(before > 0 && before < 10);
+
+    // restart scheduler, test recovering the job.
+    scheduler = new ProcedureScheduler(CONF);
+    scheduler.init();
+    scheduler.waitUntilDone(job);
+    int after = MultiPhaseProcedure.getCounter();
+    assertEquals(10, after + before);
+  }
 }
-//
-//  @Test
-//  public void testJobSeDe() throws Exception {
-//    ArrayList<Task> tasks = new ArrayList<>();
-//    for (int i = 0; i < 5; i++) {
-//      tasks.add(new BasicTaskImpl("TASK_" + i, "TASK_" + (i + 1), 1000L));
-//    }
-//    final RecordContext jcontext = new RecordContext(tasks.get(0).getName());
-//    RecordContext.class.getConstructors();
-//    Job job = new Job(jcontext, tasks);
-//
-//    job.setId("newId");
-//    ByteArrayOutputStream bao = new ByteArrayOutputStream();
-//    job.write(new DataOutputStream(bao));
-//    bao.flush();
-//    ByteArrayInputStream bai = new ByteArrayInputStream(bao.toByteArray());
-//    Job newJob = new Job();
-//    newJob.readFields(new DataInputStream(bai));
-//
-//    assertEquals(job, newJob);
-//    assertEquals(job.getContext(), newJob.getContext());
-//  }
-//
-//  @Test
-//  public void testSchedulerDownAndRecoverJob() throws Exception {
-//    // prepare
-//    JobScheduler scheduler = new JobScheduler();
-//    scheduler.init(CONF);
-//    ArrayList<Task> tasks = new ArrayList<>();
-//    tasks.add(new RecordTask("TASK_FIRST", "RETRY_TASK", 1000L));
-//    RetryTask retryTask = new RetryTask("RETRY_TASK", "TASK_0", 1000L, 5);
-//    tasks.add(retryTask);
-//    for (int i = 0; i < 5; i++) {
-//      tasks.add(new RecordTask("TASK_" + i, "TASK_" + (i + 1), 1000L));
-//    }
-//    RecordContext jcontext = new RecordContext(tasks.get(0).getName());
-//    Job job = new Job(jcontext, tasks);
-//
-//    // set FORCE_RETRY=true to make the job retrying.
-//    RetryTask.FORCE_RETRY = true;
-//    scheduler.schedule(job);
-//    Thread.sleep(1000);
-//    scheduler.shutDown();
-//
-//    // restart scheduler, test recovering the job.
-//    scheduler.init(CONF);
-//    Set<Job> jobs = null;
-//    while (jobs == null || jobs.size() == 0) {
-//      jobs = scheduler.getRunningJobs();
-//      Thread.sleep(1000);
-//    }
-//    assertEquals(1, jobs.size());
-//
-//    RetryTask.FORCE_RETRY = false;
-//    job = jobs.iterator().next();
-//    job.waitJobDone();
-//
-//    jcontext = (RecordContext)job.getContext();
-//    List<Task> finished = jcontext.getFinishTasks();
-//    assertEquals(tasks.size(), finished.size());
-//    for (int i = 0; i < tasks.size(); i++) {
-//      assertEquals(tasks.get(i), finished.get(i));
-//    }
-//  }
 //
 //  @Test
 //  public void testHdfsDownAndRecoverJob() throws Exception {
@@ -258,6 +253,59 @@ public class TestProcedureScheduler {
 //        scheduler.getLatestContextLog(job));
 //  }
 //}
+//TODO 加一个单测，测试当一个job完成了之后，再recover这个job，这个job其实没有执行任何procedure。
+//TODO 加一个单测，测试writeJournal失败后shutdown。
+class MultiPhaseProcedure extends Procedure {
+
+  private int totalPhase;
+  private int currentPhase = 0;
+  static int counter = 0;
+
+  public MultiPhaseProcedure() {}
+
+  public MultiPhaseProcedure(String name, long delay, int totalPhase) {
+    super(name, delay);
+    this.totalPhase = totalPhase;
+  }
+
+  @Override
+  public boolean execute(Procedure lastProcedure)
+      throws RetryException, IOException {
+    if (currentPhase < totalPhase) {
+      LOG.info("phase " + currentPhase);
+      currentPhase++;
+      counter++;
+      try {
+        Thread.sleep(100);
+      } catch (InterruptedException e) {
+      }
+      return false;
+    }
+    return true;
+  }
+
+  @Override
+  public void write(DataOutput out) throws IOException {
+    super.write(out);
+    out.writeInt(totalPhase);
+    out.writeInt(currentPhase);
+  }
+
+  @Override
+  public void readFields(DataInput in) throws IOException {
+    super.readFields(in);
+    totalPhase = in.readInt();
+    currentPhase = in.readInt();
+  }
+
+  public static int getCounter() {
+    return counter;
+  }
+
+  public static void setCounter(int counter) {
+    MultiPhaseProcedure.counter = counter;
+  }
+}
 
 class RetryProcedure extends Procedure {
 
@@ -272,16 +320,31 @@ class RetryProcedure extends Procedure {
   }
 
   @Override
-  public void execute(Procedure lastProcedure) throws RetryException {
+  public boolean execute(Procedure lastProcedure) throws RetryException {
     if (retryTime > 0) {
       retryTime--;
       totalRetry++;
       throw new RetryException();
     }
+    return true;
   }
 
   public int getTotalRetry() {
     return totalRetry;
+  }
+
+  @Override
+  public void write(DataOutput out) throws IOException {
+    super.write(out);
+    out.writeInt(retryTime);
+    out.writeInt(totalRetry);
+  }
+
+  @Override
+  public void readFields(DataInput in) throws IOException {
+    super.readFields(in);
+    retryTime = in.readInt();
+    totalRetry = in.readInt();
   }
 }
 
@@ -299,13 +362,15 @@ class RecordProcedure extends Procedure<RecordProcedure> {
   }
 
   @Override
-  public void execute(RecordProcedure lastProcedure) throws RetryException {
+  public boolean execute(RecordProcedure lastProcedure) throws RetryException {
     finish.add(this);
+    return true;
   }
 }
 
 /**
- * This procedure waits specified period of time then finish.
+ * This procedure waits specified period of time then finish. It simulates the
+ * behaviour of blocking procedures.
  */
 class WaitProcedure extends Procedure {
 
@@ -320,7 +385,7 @@ class WaitProcedure extends Procedure {
   }
 
   @Override
-  public void execute(Procedure lastProcedure) throws IOException {
+  public boolean execute(Procedure lastProcedure) throws IOException {
     long startTime = Time.now();
     long timeLeft = waitTime;
     while (timeLeft > 0) {
@@ -331,5 +396,6 @@ class WaitProcedure extends Procedure {
         timeLeft = Time.now() - startTime;
       }
     }
+    return true;
   }
 }

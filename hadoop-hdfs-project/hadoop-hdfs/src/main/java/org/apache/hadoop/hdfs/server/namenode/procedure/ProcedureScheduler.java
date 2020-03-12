@@ -3,12 +3,8 @@ package org.apache.hadoop.hdfs.server.namenode.procedure;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
 
-import java.io.DataOutputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.URISyntaxException;
-import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
@@ -16,17 +12,10 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.LocatedFileStatus;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.TMP_TAIL;
 import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.WORK_THREAD_NUM;
 import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.WORK_THREAD_NUM_DEFAULT;
 /**
@@ -108,21 +97,29 @@ public class ProcedureScheduler {
     LOG.info("Add new job={}", job);
   }
 
+  public Job findJob(Job job) {
+    Job found = null;
+    for (Job j : jobSet.keySet()) {
+      if (j.getId().equals(job.getId())) {
+        found = j;
+        break;
+      }
+    }
+    return found;
+  }
 
   /**
    * Wait permanently until the job is done.
    */
   public void waitUntilDone(Job job) throws IOException {
-    if (job.isJobDone()) {
+    Job found = findJob(job);
+    if (found == null || found.isJobDone()) {
       return;
     }
-    if (!jobSet.keySet().contains(job)) {
-      throw new IOException("Job has not been submitted.");
-    }
-    synchronized (job) {
-      while (!job.isJobDone()) {
+    synchronized (found) {
+      while (!found.isJobDone()) {
         try {
-          job.wait();
+          found.wait();
         } catch (InterruptedException e) {
         }
       }
@@ -178,6 +175,15 @@ public class ProcedureScheduler {
     rooster.interrupt();
     recoverThread.interrupt();
     workersPool.shutdownNow();
+  }
+
+  /**
+   * Shutdown scheduler and wait at most timeout seconds for procedures to
+   * finish.
+   * @param timeout Wait at most timeout seconds for procedures to finish.
+   */
+  public synchronized void shutDownAndWait(int timeout) {
+    shutDown();
     while (reader.isAlive()) {
       try {
         reader.join();
@@ -198,7 +204,7 @@ public class ProcedureScheduler {
     }
     while (!workersPool.isTerminated()) {
       try {
-        workersPool.awaitTermination(2, TimeUnit.SECONDS);
+        workersPool.awaitTermination(timeout, TimeUnit.SECONDS);
       } catch (InterruptedException e) {
       }
     }
@@ -216,7 +222,8 @@ public class ProcedureScheduler {
     }
   }
 
-  private String allocateJobId() {
+  @VisibleForTesting
+  static String allocateJobId() {
     return "job-" + UUID.randomUUID();
   }
 
@@ -256,6 +263,9 @@ public class ProcedureScheduler {
           workersPool.submit(() -> {
             LOG.info("Start job. job=", job);
             job.execute();
+            if (!running.get()) {
+              return;
+            }
             if (job.isJobDone()) {
               if (job.error() == null) {
                 LOG.info("Job done. job=" + job.getId());
