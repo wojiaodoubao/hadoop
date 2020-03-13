@@ -15,7 +15,7 @@ import java.io.*;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.SCHEDULER_BASE_URI;
 import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.WORK_THREAD_NUM;
@@ -28,7 +28,7 @@ public class TestProcedureScheduler {
   private static DistributedFileSystem fs;
 
   @BeforeClass
-  public static void setup() throws IOException, URISyntaxException {
+  public static void setup() throws IOException {
     CONF.setBoolean(DFSConfigKeys.DFS_NAMENODE_DELEGATION_TOKEN_ALWAYS_USE_KEY,
         true);
     CONF.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY, "hdfs:///");
@@ -75,7 +75,7 @@ public class TestProcedureScheduler {
       List<RecordProcedure> procedures = new ArrayList<>();
       Job.Builder builder = new Job.Builder<RecordProcedure>();
       for (int i = 0; i < 5; i++) {
-        RecordProcedure r = new RecordProcedure("RECORD_" + i, 1000L);
+        RecordProcedure r = new RecordProcedure("record-" + i, 1000L);
         builder.nextProcedure(r);
         procedures.add(r);
       }
@@ -175,50 +175,62 @@ public class TestProcedureScheduler {
     int after = MultiPhaseProcedure.getCounter();
     assertEquals(10, after + before);
   }
+
+  @Test
+  public void testRecoverJobFromJournal() throws Exception {
+    Journal journal = new HDFSJournal(CONF);
+    Job.Builder builder = new Job.Builder<RecordProcedure>();
+    Procedure wait0 = new WaitProcedure("wait0", 1000, 5000);
+    Procedure wait1 = new WaitProcedure("wait1", 1000, 1000);
+    builder.nextProcedure(wait0).nextProcedure(wait1);
+
+    Job job = builder.build();
+    job.setId(ProcedureScheduler.allocateJobId());
+    job.setCurrentProcedure(wait1);
+    job.setLastProcedure(null);
+    journal.saveJob(job);
+
+    long start = Time.now();
+    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    scheduler.init();
+    scheduler.waitUntilDone(job);
+    long duration = Time.now() - start;
+    assertTrue(duration >= 1000 && duration < 5000);
+  }
+
+  /**
+   * Test the job will be recovered if writing journal fails.
+   */
+  @Test
+  public void testJobRecoveryWhenWriteJournalFail() throws Exception {
+    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    scheduler.init();
+
+    // construct job
+    AtomicBoolean recoverFlag = new AtomicBoolean(true);
+    Job.Builder builder = new Job.Builder<>();
+    builder.nextProcedure(new WaitProcedure("wait", 1000, 1000))
+        .nextProcedure(new UnrecoverableProcedure("shutdown", 1000,
+            lastProcedure -> {
+                cluster.restartNameNode(false);
+                return true;
+            }))
+        .nextProcedure(new UnrecoverableProcedure("recoverFlag", 1000,
+            lastProcedure -> {
+              recoverFlag.set(false);
+              return true;
+            }))
+        .nextProcedure(new WaitProcedure("wait", 1000, 1000));
+
+    Job job = builder.build();
+    scheduler.submit(job);
+    scheduler.waitUntilDone(job);
+    assertTrue(job.isJobDone());
+    assertNull(job.error());
+    assertTrue(recoverFlag.get());
+  }
+
 }
-//
-//  @Test
-//  public void testHdfsDownAndRecoverJob() throws Exception {
-//    final AtomicBoolean restart = new AtomicBoolean(false);
-//    class InnerJobScheduler extends JobScheduler {
-//
-//      public InnerJobScheduler() throws IOException {
-//      }
-//
-//      @Override
-//      boolean saveContext(Job job) {
-//        if (restart.get()) {
-//          try {
-//            restart.set(false);
-//            cluster.restartNameNode(false);
-//          } catch (IOException e) {
-//          }
-//        }
-//        return super.saveContext(job);
-//      }
-//    }
-//    InnerJobScheduler scheduler = new InnerJobScheduler();
-//    scheduler.init(CONF);
-//    ArrayList<Task> tasks = new ArrayList<>();
-//    tasks.add(new RecordTask("TASK_0", "RETRY_TASK", 1000L));
-//    tasks.add(new RetryTask("RETRY_TASK", "TASK_1", 1000L, 5));
-//    tasks.add(new RecordTask("TASK_1", "DONE", 1000L));
-//    RecordContext jcontext = new RecordContext(tasks.get(0).getName());
-//    Job job = new Job(jcontext, tasks);
-//
-//    scheduler.schedule(job);
-//    Thread.sleep(1000);
-//    restart.set(true);
-//    cluster.waitActive();
-//    job.waitJobDone();
-//
-//    jcontext = (RecordContext)job.getContext();
-//    List<Task> finished = jcontext.getFinishTasks();
-//    assertEquals(tasks.size(), finished.size());
-//    for (int i = 0; i < tasks.size(); i++) {
-//      assertEquals(tasks.get(i), finished.get(i));
-//    }
-//  }
 //
 //  @Test
 //  public void testSaveContext() throws Exception {
@@ -255,147 +267,3 @@ public class TestProcedureScheduler {
 //}
 //TODO 加一个单测，测试当一个job完成了之后，再recover这个job，这个job其实没有执行任何procedure。
 //TODO 加一个单测，测试writeJournal失败后shutdown。
-class MultiPhaseProcedure extends Procedure {
-
-  private int totalPhase;
-  private int currentPhase = 0;
-  static int counter = 0;
-
-  public MultiPhaseProcedure() {}
-
-  public MultiPhaseProcedure(String name, long delay, int totalPhase) {
-    super(name, delay);
-    this.totalPhase = totalPhase;
-  }
-
-  @Override
-  public boolean execute(Procedure lastProcedure)
-      throws RetryException, IOException {
-    if (currentPhase < totalPhase) {
-      LOG.info("phase " + currentPhase);
-      currentPhase++;
-      counter++;
-      try {
-        Thread.sleep(100);
-      } catch (InterruptedException e) {
-      }
-      return false;
-    }
-    return true;
-  }
-
-  @Override
-  public void write(DataOutput out) throws IOException {
-    super.write(out);
-    out.writeInt(totalPhase);
-    out.writeInt(currentPhase);
-  }
-
-  @Override
-  public void readFields(DataInput in) throws IOException {
-    super.readFields(in);
-    totalPhase = in.readInt();
-    currentPhase = in.readInt();
-  }
-
-  public static int getCounter() {
-    return counter;
-  }
-
-  public static void setCounter(int counter) {
-    MultiPhaseProcedure.counter = counter;
-  }
-}
-
-class RetryProcedure extends Procedure {
-
-  private int retryTime = 1;
-  private int totalRetry = 0;
-
-  public RetryProcedure() {}
-
-  public RetryProcedure(String name, long delay, int retryTime) {
-    super(name, delay);
-    this.retryTime = retryTime;
-  }
-
-  @Override
-  public boolean execute(Procedure lastProcedure) throws RetryException {
-    if (retryTime > 0) {
-      retryTime--;
-      totalRetry++;
-      throw new RetryException();
-    }
-    return true;
-  }
-
-  public int getTotalRetry() {
-    return totalRetry;
-  }
-
-  @Override
-  public void write(DataOutput out) throws IOException {
-    super.write(out);
-    out.writeInt(retryTime);
-    out.writeInt(totalRetry);
-  }
-
-  @Override
-  public void readFields(DataInput in) throws IOException {
-    super.readFields(in);
-    retryTime = in.readInt();
-    totalRetry = in.readInt();
-  }
-}
-
-/**
- * This procedure records all the finished procedures.
- */
-class RecordProcedure extends Procedure<RecordProcedure> {
-
-  static List<RecordProcedure> finish = new ArrayList<>();
-
-  public RecordProcedure() {}
-
-  public RecordProcedure(String name, long delay) {
-    super(name, delay);
-  }
-
-  @Override
-  public boolean execute(RecordProcedure lastProcedure) throws RetryException {
-    finish.add(this);
-    return true;
-  }
-}
-
-/**
- * This procedure waits specified period of time then finish. It simulates the
- * behaviour of blocking procedures.
- */
-class WaitProcedure extends Procedure {
-
-  long waitTime;
-
-  public WaitProcedure() {
-  }
-
-  public WaitProcedure(String name, long delay, long waitTime) {
-    super(name, delay);
-    this.waitTime = waitTime;
-  }
-
-  @Override
-  public boolean execute(Procedure lastProcedure) throws IOException {
-    long startTime = Time.now();
-    long timeLeft = waitTime;
-    while (timeLeft > 0) {
-      try {
-        Thread.sleep(timeLeft);
-      } catch (InterruptedException e) {
-        verifySchedulerShutdown();
-        timeLeft = Time.now() - startTime;
-      }
-    }
-    return true;
-  }
-}

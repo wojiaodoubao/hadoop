@@ -1,5 +1,6 @@
 package org.apache.hadoop.hdfs.server.namenode.procedure;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -109,8 +110,7 @@ public class Job<T extends Procedure> implements Writable {
         if (scheduler.writeJournal(this)) {
           continue;
         } else {
-          scheduler.shutDown();
-          return;
+          return;// write journal failed. The job is added to the recoverQueue.
         }
       }
     }
@@ -145,12 +145,14 @@ public class Job<T extends Procedure> implements Writable {
     return this.id;
   }
 
-  public T getCurrentProcedure() {
-    return curProcedure;
+  @VisibleForTesting
+  void setLastProcedure(T lastProcedure) {
+    this.lastProcedure = lastProcedure;
   }
 
-  public T getFirstProcedure() {
-    return firstProcedure;
+  @VisibleForTesting
+  void setCurrentProcedure(T currentProcedure) {
+    this.curProcedure = currentProcedure;
   }
 
   public boolean isJobDone() {
