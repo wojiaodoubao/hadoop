@@ -6,7 +6,7 @@ import java.io.OutputStream;
 import java.util.List;
 
 /**
- *
+ * TODO:修改这个注释
  */
 public interface Journal {
   //TODO:add annotation.

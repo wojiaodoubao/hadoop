@@ -12,6 +12,9 @@ import java.io.IOException;
 
 import static org.apache.hadoop.hdfs.server.namenode.procedure.Job.NEXT_PROCEDURE_NONE;
 
+/**
+ * TODO:修改这个注释
+ */
 public abstract class Procedure<T extends Procedure> implements Writable {
 
   public static final Logger LOG =
@@ -59,10 +62,8 @@ public abstract class Procedure<T extends Procedure> implements Writable {
   /**
    * The active flag.
    */
-  protected void verifySchedulerShutdown() throws IOException {
-    if (job.isSchedulerShutdown()) {
-      throw new IOException("Scheduler is shutdown.");
-    }
+  protected boolean isSchedulerShutdown() throws IOException {
+    return job.isSchedulerShutdown();
   }
 
   protected void setNextProcedure(String nextProcedure) {

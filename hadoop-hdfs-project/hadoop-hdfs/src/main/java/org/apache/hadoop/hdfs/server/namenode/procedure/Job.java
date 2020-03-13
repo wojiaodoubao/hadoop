@@ -17,6 +17,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.ArrayList;
 
+/**
+ * TODO:修改这个注释
+ */
 public class Job<T extends Procedure> implements Writable {
   private String id;
   private ProcedureScheduler scheduler;
@@ -27,6 +30,7 @@ public class Job<T extends Procedure> implements Writable {
   private T firstProcedure;
   private T curProcedure;
   private T lastProcedure;
+  private boolean removeAfterDone = true;
 
   public static String NEXT_PROCEDURE_NONE = "NONE";
   static Set<String> RESERVED_NAME = new HashSet<>();
@@ -38,6 +42,7 @@ public class Job<T extends Procedure> implements Writable {
   public static class Builder<T extends Procedure> {
 
     List<T> procedures = new ArrayList<>();
+    boolean removeAfterDone = false;
 
     public Builder addProcedure(T procedure) {
       procedures.add(procedure);
@@ -54,8 +59,17 @@ public class Job<T extends Procedure> implements Writable {
       return this;
     }
 
+    /**
+     * Automatically remove this job from the scheduler cache when the job is
+     * done.
+     */
+    public Builder removeAfterDone(boolean removeAfterDone) {
+      this.removeAfterDone = removeAfterDone;
+      return this;
+    }
+
     public Job build() throws IOException {
-      Job job = new Job(procedures);
+      Job job = new Job(procedures, removeAfterDone);
       for (Procedure<T> p : procedures) {
         p.setJob(job);
       }
@@ -65,7 +79,7 @@ public class Job<T extends Procedure> implements Writable {
 
   private Job() {}
 
-  private Job(Iterable<T> procedures) throws IOException {
+  private Job(Iterable<T> procedures, boolean remove) throws IOException {
     for (T p : procedures) {
       String taskName = p.name();
       for (String rname : RESERVED_NAME) {
@@ -78,6 +92,7 @@ public class Job<T extends Procedure> implements Writable {
         firstProcedure = p;
       }
     }
+    removeAfterDone = remove;
     lastProcedure = null;
     curProcedure = firstProcedure;
   }
@@ -143,6 +158,10 @@ public class Job<T extends Procedure> implements Writable {
 
   public String getId() {
     return this.id;
+  }
+
+  public boolean removeAfterDone() {
+    return removeAfterDone;
   }
 
   @VisibleForTesting

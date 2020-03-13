@@ -1,7 +1,13 @@
 package org.apache.hadoop.hdfs.server.namenode.procedure;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.*;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.LocatedFileStatus;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.util.SequentialNumber;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,7 +18,9 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 
-import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.*;
+import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.SCHEDULER_BASE_URI;
+import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.TMP_TAIL;
+import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.JOB_PREFIX;
 
 /**
  * The procedure journal based on HDFS.

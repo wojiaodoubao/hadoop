@@ -11,15 +11,21 @@ import org.apache.hadoop.util.Time;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.*;
-import java.net.URISyntaxException;
+import java.io.IOException;
+import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.SCHEDULER_BASE_URI;
 import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.WORK_THREAD_NUM;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotSame;
 
 public class TestProcedureScheduler {
 
@@ -49,21 +55,20 @@ public class TestProcedureScheduler {
   }
 
   @Test(timeout = 30000)
-  public void testShutdownScheduler()
-      throws IOException, URISyntaxException, InterruptedException {
+  public void testShutdownScheduler() throws Exception {
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
     scheduler.init();
     // construct job
     Job.Builder builder = new Job.Builder<>();
-    builder.nextProcedure(new WaitProcedure("WAIT", 1000, 30 * 1000));
+    builder.nextProcedure(new WaitProcedure("wait", 1000, 30 * 1000));
     Job job = builder.build();
 
     scheduler.submit(job);
     Thread.sleep(1000);// wait job to be scheduled.
-    scheduler.shutDownAndWait(2);
-    scheduler.waitUntilDone(job);
-    GenericTestUtils
-        .assertExceptionContains("Scheduler is shutdown", job.error());
+    scheduler.shutDownAndWait(30 * 1000);
+
+    Journal journal = new HDFSJournal(CONF);
+    journal.clear(job);
   }
 
   @Test(timeout = 30000)
@@ -95,6 +100,53 @@ public class TestProcedureScheduler {
   }
 
   @Test
+  public void testFailedJob() throws Exception {
+    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    scheduler.init();
+    try {
+      Job.Builder builder = new Job.Builder<>();
+      builder.nextProcedure(
+          new UnrecoverableProcedure("fail", 1000, lastProcedure -> {
+            throw new IOException("Job failed exception.");
+          }));
+      Job job = builder.build();
+      scheduler.submit(job);
+      scheduler.waitUntilDone(job);
+      GenericTestUtils
+          .assertExceptionContains("Job failed exception", job.error());
+    } finally {
+      scheduler.shutDownAndWait(2);
+    }
+  }
+
+  @Test
+  public void testGetJobAfterRecover() throws Exception {
+    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    scheduler.init();
+    try {
+      // construct job
+      Job.Builder builder = new Job.Builder<>();
+      builder.addProcedure(new WaitProcedure("wait", 1000, 1000))
+          .removeAfterDone(false);
+      Job job = builder.build();
+      scheduler.submit(job);
+      scheduler.shutDownAndWait(2);
+
+      // restart scheduler and recover the job.
+      scheduler = new ProcedureScheduler(CONF);
+      scheduler.init();
+      scheduler.waitUntilDone(job);
+
+      Job recoverJob = scheduler.findJob(job);
+      assertNull(recoverJob.error());
+      assertNotSame(job, recoverJob);
+      assertEquals(job, recoverJob);
+    } finally {
+      scheduler.shutDownAndWait(2);
+    }
+  }
+
+  @Test(timeout = 5000)
   public void testRetry() throws Exception {
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
     scheduler.init();
@@ -118,16 +170,20 @@ public class TestProcedureScheduler {
     }
   }
 
-  @Test
+  @Test(timeout = 5000)
   public void testEmptyJob() throws Exception {
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
     scheduler.init();
-    Job job = new Job.Builder<>().build();
-    scheduler.submit(job);
-    scheduler.waitUntilDone(job);
+    try {
+      Job job = new Job.Builder<>().build();
+      scheduler.submit(job);
+      scheduler.waitUntilDone(job);
+    } finally {
+      scheduler.shutDownAndWait(2);
+    }
   }
 
-  @Test
+  @Test(timeout = 5000)
   public void testJobSerializeAndDeserialize() throws Exception {
     Job.Builder builder = new Job.Builder<RecordProcedure>();
     for (int i = 0; i < 5; i++) {
@@ -148,35 +204,38 @@ public class TestProcedureScheduler {
     assertEquals(job, newJob);
   }
 
-  @Test
+  @Test(timeout = 5000)
   public void testSchedulerDownAndRecoverJob() throws Exception {
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
     scheduler.init();
 
-    // construct job
-    Job.Builder builder = new Job.Builder<>();
-    MultiPhaseProcedure multiPhaseProcedure =
-        new MultiPhaseProcedure("retry", 1000, 10);
-    builder.addProcedure(multiPhaseProcedure);
-    Job job = builder.build();
+    try {
+      // construct job
+      Job.Builder builder = new Job.Builder<>();
+      MultiPhaseProcedure multiPhaseProcedure = new MultiPhaseProcedure("retry", 1000, 10);
+      builder.addProcedure(multiPhaseProcedure);
+      Job job = builder.build();
 
-    scheduler.submit(job);
-    Thread.sleep(500);// wait procedure to be scheduled.
-    scheduler.shutDownAndWait(2);
+      scheduler.submit(job);
+      Thread.sleep(500);// wait procedure to be scheduled.
+      scheduler.shutDownAndWait(2);
 
-    int before = MultiPhaseProcedure.getCounter();
-    MultiPhaseProcedure.setCounter(0);
-    assertTrue(before > 0 && before < 10);
+      int before = MultiPhaseProcedure.getCounter();
+      MultiPhaseProcedure.setCounter(0);
+      assertTrue(before > 0 && before < 10);
 
-    // restart scheduler, test recovering the job.
-    scheduler = new ProcedureScheduler(CONF);
-    scheduler.init();
-    scheduler.waitUntilDone(job);
-    int after = MultiPhaseProcedure.getCounter();
-    assertEquals(10, after + before);
+      // restart scheduler, test recovering the job.
+      scheduler = new ProcedureScheduler(CONF);
+      scheduler.init();
+      scheduler.waitUntilDone(job);
+      int after = MultiPhaseProcedure.getCounter();
+      assertEquals(10, after + before);
+    } finally {
+      scheduler.shutDownAndWait(2);
+    }
   }
 
-  @Test
+  @Test(timeout = 5000)
   public void testRecoverJobFromJournal() throws Exception {
     Journal journal = new HDFSJournal(CONF);
     Job.Builder builder = new Job.Builder<RecordProcedure>();
@@ -193,77 +252,46 @@ public class TestProcedureScheduler {
     long start = Time.now();
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
     scheduler.init();
-    scheduler.waitUntilDone(job);
-    long duration = Time.now() - start;
-    assertTrue(duration >= 1000 && duration < 5000);
+    try {
+      scheduler.waitUntilDone(job);
+      long duration = Time.now() - start;
+      assertTrue(duration >= 1000 && duration < 5000);
+    } finally {
+      scheduler.shutDownAndWait(2);
+    }
   }
 
   /**
    * Test the job will be recovered if writing journal fails.
    */
-  @Test
+  @Test(timeout = 10000)
   public void testJobRecoveryWhenWriteJournalFail() throws Exception {
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
     scheduler.init();
 
-    // construct job
-    AtomicBoolean recoverFlag = new AtomicBoolean(true);
-    Job.Builder builder = new Job.Builder<>();
-    builder.nextProcedure(new WaitProcedure("wait", 1000, 1000))
-        .nextProcedure(new UnrecoverableProcedure("shutdown", 1000,
-            lastProcedure -> {
+    try {
+      // construct job
+      AtomicBoolean recoverFlag = new AtomicBoolean(true);
+      Job.Builder builder = new Job.Builder<>();
+      builder.nextProcedure(new WaitProcedure("wait", 1000, 1000))
+          .nextProcedure(
+              new UnrecoverableProcedure("shutdown", 1000, lastProcedure -> {
                 cluster.restartNameNode(false);
                 return true;
-            }))
-        .nextProcedure(new UnrecoverableProcedure("recoverFlag", 1000,
-            lastProcedure -> {
-              recoverFlag.set(false);
-              return true;
-            }))
-        .nextProcedure(new WaitProcedure("wait", 1000, 1000));
+              })).nextProcedure(
+          new UnrecoverableProcedure("recoverFlag", 1000, lastProcedure -> {
+            recoverFlag.set(false);
+            return true;
+          })).nextProcedure(new WaitProcedure("wait", 1000, 1000));
 
-    Job job = builder.build();
-    scheduler.submit(job);
-    scheduler.waitUntilDone(job);
-    assertTrue(job.isJobDone());
-    assertNull(job.error());
-    assertTrue(recoverFlag.get());
+      Job job = builder.build();
+      scheduler.submit(job);
+      scheduler.waitUntilDone(job);
+      assertTrue(job.isJobDone());
+      assertNull(job.error());
+      assertTrue(recoverFlag.get());
+    } finally {
+      scheduler.shutDownAndWait(2);
+    }
   }
-
 }
-//
-//  @Test
-//  public void testSaveContext() throws Exception {
-//    JobScheduler scheduler = new JobScheduler();
-//    scheduler.init(CONF);
-//    LabelContext label = new LabelContext();
-//    label.label = "A";
-//    Job job = new Job(label, new ArrayList<Task>());
-//    job.setId("foo-id");
-//    assertTrue(scheduler.saveContext(job));
-//    label.label = "B";
-//    assertTrue(scheduler.saveContext(job));
-//  }
-//
-//  @Test
-//  public void testGetLatestContext() throws Exception {
-//    JobScheduler scheduler = new JobScheduler();
-//    scheduler.init(CONF);
-//    Job job = new Job(new JobContext(), new ArrayList<Task>());
-//    job.setId("foo-id");
-//
-//    Path workPath = new Path(CONF.get(SCHEDULER_BASE_URI));
-//    Path jobPath = new Path(workPath, "foo-id");
-//    fs.mkdirs(jobPath);
-//    OutputStream out = null;
-//    out = fs.create(new Path(jobPath, CONTEXT_PREFIX + "1500"));
-//    out.close();
-//    out = fs.create(new Path(jobPath, CONTEXT_PREFIX + "1501"));
-//    out.close();
-//
-//    assertEquals(new Path(jobPath, CONTEXT_PREFIX + "1501"),
-//        scheduler.getLatestContextLog(job));
-//  }
-//}
-//TODO 加一个单测，测试当一个job完成了之后，再recover这个job，这个job其实没有执行任何procedure。
-//TODO 加一个单测，测试writeJournal失败后shutdown。

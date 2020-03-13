@@ -5,10 +5,14 @@ import com.google.common.primitives.Ints;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
-import java.util.Collections;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.DelayQueue;
+import java.util.concurrent.Delayed;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.conf.Configuration;
@@ -97,6 +101,12 @@ public class ProcedureScheduler {
     LOG.info("Add new job={}", job);
   }
 
+  /**
+   * Find job in scheduler.
+   *
+   * @return the job in scheduler. Null if the schedule has no job with the
+   *         same id.
+   */
   public Job findJob(Job job) {
     Job found = null;
     for (Job j : jobSet.keySet()) {
@@ -111,7 +121,7 @@ public class ProcedureScheduler {
   /**
    * Wait permanently until the job is done.
    */
-  public void waitUntilDone(Job job) throws IOException {
+  public void waitUntilDone(Job job) {
     Job found = findJob(job);
     if (found == null || found.isJobDone()) {
       return;
@@ -137,7 +147,9 @@ public class ProcedureScheduler {
   boolean jobDone(Job job) {
     try {
       journal.clear(job);
-      jobSet.remove(job);
+      if (job.removeAfterDone()) {
+        jobSet.remove(job);
+      }
       return true;
     } catch (IOException e) {
       LOG.warn("Failed finish job " + job.getId(), e);
@@ -159,12 +171,15 @@ public class ProcedureScheduler {
     }
   }
 
+  /**
+   * The running state of the scheduler.
+   */
   public boolean isRunning() {
     return running.get();
   }
 
   /**
-   * Shutdown scheduler.
+   * Shutdown the scheduler.
    */
   public synchronized void shutDown() {
     if (!running.get()) {
@@ -227,18 +242,10 @@ public class ProcedureScheduler {
     return "job-" + UUID.randomUUID();
   }
 
-  /**
-   * Get all jobs.
-   */
-  public Set<Job> getRunningJobs() {
-    if (jobSet != null) {
-      return Collections.unmodifiableSet(jobSet.keySet());
-    } else {
-      return Collections.EMPTY_SET;
-    }
-  }
 
-  // TODO: annotation to all these threads.
+  /**
+   * This thread consumes the delayQueue and move the jobs to the runningQueue.
+   */
   class Rooster extends Thread {
     @Override
     public void run() {
@@ -254,6 +261,9 @@ public class ProcedureScheduler {
     }
   }
 
+  /**
+   * This thread consumes the runningQueue and give the job to the workers.
+   */
   class Reader extends Thread {
     @Override
     public void run() {
@@ -289,6 +299,10 @@ public class ProcedureScheduler {
     }
   }
 
+  /**
+   * This thread consumes the recoverQueue, recovers the job the adds it to the
+   * runningQueue.
+   */
   class Recover extends Thread {
     @Override
     public void run() {

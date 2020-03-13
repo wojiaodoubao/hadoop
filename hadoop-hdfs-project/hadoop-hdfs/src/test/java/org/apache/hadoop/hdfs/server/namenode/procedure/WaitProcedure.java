@@ -30,7 +30,9 @@ public class WaitProcedure extends Procedure {
       try {
         Thread.sleep(timeLeft);
       } catch (InterruptedException e) {
-        verifySchedulerShutdown();
+        if (isSchedulerShutdown()) {
+          return false;
+        }
       } finally {
         timeLeft = waitTime - (Time.now() - startTime);
       }
