@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.ArrayList;
 
 /**
- * TODO:修改这个注释
+ * A Job is a state machine consists of many procedures.
  */
 public class Job<T extends Procedure> implements Writable {
   private String id;
@@ -148,18 +148,24 @@ public class Job<T extends Procedure> implements Writable {
     }
   }
 
-  public void setScheduler(ProcedureScheduler scheduler) {
+  void setScheduler(ProcedureScheduler scheduler) {
     this.scheduler = scheduler;
   }
 
-  public void setId(String id) {
+  void setId(String id) {
     this.id = id;
   }
 
+  /**
+   * Get the uid of the job.
+   */
   public String getId() {
     return this.id;
   }
 
+  /**
+   * Whether this job should be removed after it's done.
+   */
   public boolean removeAfterDone() {
     return removeAfterDone;
   }
@@ -174,10 +180,17 @@ public class Job<T extends Procedure> implements Writable {
     this.curProcedure = currentProcedure;
   }
 
+  /**
+   * Return true if the job has finished.
+   */
   public boolean isJobDone() {
     return jobDone;
   }
 
+  /**
+   * Return the error exception during the job execution. This should be called
+   * after the job finishes.
+   */
   public Exception error() {
     return error;
   }
@@ -273,7 +286,7 @@ public class Job<T extends Procedure> implements Writable {
         firstProcedure.name() + "-" + firstProcedure.getClass());
   }
 
-  public boolean isSchedulerShutdown() {
+  boolean isSchedulerShutdown() {
     return !scheduler.isRunning();
   }
 }

@@ -23,7 +23,7 @@ import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKe
 import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.JOB_PREFIX;
 
 /**
- * The procedure journal based on HDFS.
+ * Journal based on HDFS.
  */
 public class HDFSJournal implements Journal {
 
@@ -38,12 +38,6 @@ public class HDFSJournal implements Journal {
   private URI workUri;
   private Configuration conf;
   private IdGenerator generator;
-
-  public HDFSJournal(Configuration conf) throws URISyntaxException {
-    this.workUri = new URI(conf.get(SCHEDULER_BASE_URI));
-    this.conf = conf;
-    this.generator = new IdGenerator(System.currentTimeMillis());
-  }
 
   /**
    * Save job journal to HDFS.
@@ -119,6 +113,22 @@ public class HDFSJournal implements Journal {
     if (fs.exists(jobBase)) {
       fs.delete(jobBase, true);
     }
+  }
+
+  @Override
+  public void setConf(Configuration conf) {
+    try {
+      this.workUri = new URI(conf.get(SCHEDULER_BASE_URI));
+    } catch (URISyntaxException e) {
+      throw new IllegalArgumentException("URI resolution failed.", e);
+    }
+    this.conf = conf;
+    this.generator = new IdGenerator(System.currentTimeMillis());
+  }
+
+  @Override
+  public Configuration getConf() {
+    return conf;
   }
 
   private Path getJobBaseDir(Job job) {

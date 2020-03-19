@@ -7,6 +7,7 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Time;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -54,6 +55,9 @@ public class TestProcedureScheduler {
     fs.mkdirs(new Path(workPath));
   }
 
+  /**
+   * Test the scheduler could be shutdown correctly.
+   */
   @Test(timeout = 30000)
   public void testShutdownScheduler() throws Exception {
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
@@ -67,10 +71,13 @@ public class TestProcedureScheduler {
     Thread.sleep(1000);// wait job to be scheduled.
     scheduler.shutDownAndWait(30 * 1000);
 
-    Journal journal = new HDFSJournal(CONF);
+    Journal journal = ReflectionUtils.newInstance(HDFSJournal.class, CONF);
     journal.clear(job);
   }
 
+  /**
+   * Test a successful job.
+   */
   @Test(timeout = 30000)
   public void testSuccessfulJob() throws Exception {
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
@@ -99,6 +106,9 @@ public class TestProcedureScheduler {
     }
   }
 
+  /**
+   * Test a job fails and the error can be got.
+   */
   @Test
   public void testFailedJob() throws Exception {
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
@@ -119,6 +129,9 @@ public class TestProcedureScheduler {
     }
   }
 
+  /**
+   * Test recover a job.
+   */
   @Test
   public void testGetJobAfterRecover() throws Exception {
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
@@ -146,6 +159,9 @@ public class TestProcedureScheduler {
     }
   }
 
+  /**
+   * Test RetryException is handled correctly.
+   */
   @Test(timeout = 5000)
   public void testRetry() throws Exception {
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
@@ -170,6 +186,9 @@ public class TestProcedureScheduler {
     }
   }
 
+  /**
+   * Test schedule an empty job.
+   */
   @Test(timeout = 5000)
   public void testEmptyJob() throws Exception {
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
@@ -183,6 +202,9 @@ public class TestProcedureScheduler {
     }
   }
 
+  /**
+   * Test serialization and deserialization of Job.
+   */
   @Test(timeout = 5000)
   public void testJobSerializeAndDeserialize() throws Exception {
     Job.Builder builder = new Job.Builder<RecordProcedure>();
@@ -204,6 +226,9 @@ public class TestProcedureScheduler {
     assertEquals(job, newJob);
   }
 
+  /**
+   * Test scheduler crashes and recovers.
+   */
   @Test(timeout = 5000)
   public void testSchedulerDownAndRecoverJob() throws Exception {
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
@@ -237,7 +262,7 @@ public class TestProcedureScheduler {
 
   @Test(timeout = 5000)
   public void testRecoverJobFromJournal() throws Exception {
-    Journal journal = new HDFSJournal(CONF);
+    Journal journal = ReflectionUtils.newInstance(HDFSJournal.class, CONF);
     Job.Builder builder = new Job.Builder<RecordProcedure>();
     Procedure wait0 = new WaitProcedure("wait0", 1000, 5000);
     Procedure wait1 = new WaitProcedure("wait1", 1000, 1000);

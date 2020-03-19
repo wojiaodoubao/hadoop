@@ -1,17 +1,31 @@
 package org.apache.hadoop.hdfs.server.namenode.procedure;
 
+import org.apache.hadoop.conf.Configurable;
+
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.List;
 
 /**
- * TODO:修改这个注释
+ * The Journal of the state machine. It handles the job persistence and recover.
  */
-public interface Journal {
-  //TODO:add annotation.
-  public void saveJob(Job job) throws IOException;
-  public void recoverJob(Job job) throws IOException;
-  public Job[] listAllJobs() throws IOException;
-  public void clear(Job job) throws IOException;
+public interface Journal extends Configurable {
+
+  /**
+   * Save journal of this job.
+   */
+  void saveJob(Job job) throws IOException;
+
+  /**
+   * Recover the job from journal.
+   */
+  void recoverJob(Job job) throws IOException;
+
+  /**
+   * List all unfinished jobs.
+   */
+  Job[] listAllJobs() throws IOException;
+
+  /**
+   * Clear all the journals of this job.
+   */
+  void clear(Job job) throws IOException;
 }

@@ -13,7 +13,7 @@ import java.io.IOException;
 import static org.apache.hadoop.hdfs.server.namenode.procedure.Job.NEXT_PROCEDURE_NONE;
 
 /**
- * TODO:修改这个注释
+ * The components of the Job. It implements the custom logic.
  */
 public abstract class Procedure<T extends Procedure> implements Writable {
 
@@ -62,7 +62,7 @@ public abstract class Procedure<T extends Procedure> implements Writable {
   /**
    * The active flag.
    */
-  protected boolean isSchedulerShutdown() throws IOException {
+  protected boolean isSchedulerShutdown() {
     return job.isSchedulerShutdown();
   }
 
@@ -124,6 +124,10 @@ public abstract class Procedure<T extends Procedure> implements Writable {
     }
   }
 
+  /**
+   * The RetryException represents the current procedure should be delayed then
+   * retried.
+   */
   public static class RetryException extends Exception {
     public RetryException() {
     }

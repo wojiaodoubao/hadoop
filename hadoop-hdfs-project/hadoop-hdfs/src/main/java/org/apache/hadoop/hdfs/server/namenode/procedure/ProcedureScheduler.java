@@ -16,29 +16,33 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.WORK_THREAD_NUM;
 import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.WORK_THREAD_NUM_DEFAULT;
+import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.JOURNAL_CLASS;
 /**
- * TODO:修改这个注释
  * The state machine framework consist of:
- *   Job:        the state machine.
- *   Task:       the state node of the state machine. it should be stateless.
- *   JobContext: the context passing through the state machine.
+ *   Job:                The state machine. It implements the basic logic of the
+ *                       state machine.
+ *   Procedure:          The components of the job. It implements the custom
+ *                       logic.
+ *   ProcedureScheduler: The multi-thread model responsible for running,
+ *                       recovering, handling errors and job persistence.
+ *   Journal:            It handles the job persistence and recover.
  *
  * Example:
- *   ArrayList<Task> tasks = new ArrayList<>();
- *   for (int i = 0; i < 5; i++) {
- *     tasks.add(new BasicTaskImpl("TASK_" + i, "TASK_" + (i + 1), 1000L));
- *   }
- *   final JobContext context = new JobContext(tasks.get(0).getName());
- *   Job job = new Job(context, tasks);
+ *   Job.Builder builder = new Job.Builder<>();
+ *   builder.nextProcedure(new WaitProcedure("wait", 1000, 30 * 1000));
+ *   Job job = builder.build();
  *
- *   JobScheduler scheduler = new JobScheduler(CONF);
+ *   ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
  *   scheduler.init();
+ *   scheduler.submit(job);
+ *   scheduler.waitUntilDone(job);
  */
 public class ProcedureScheduler {
   public static final Logger LOG =
@@ -79,8 +83,10 @@ public class ProcedureScheduler {
     this.reader = new Reader();
     this.reader.start();
 
-    // init journal. TODO:fix this.
-    journal = new HDFSJournal(conf);
+    // init journal.
+    Class<Journal> clazz =
+        (Class<Journal>) conf.getClass(JOURNAL_CLASS, HDFSJournal.class);
+    journal = ReflectionUtils.newInstance(clazz, conf);
 
     recoverAllJobs();
   }
