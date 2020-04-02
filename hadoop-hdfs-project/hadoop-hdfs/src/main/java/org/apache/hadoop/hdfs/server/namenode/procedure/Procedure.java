@@ -24,7 +24,7 @@ public abstract class Procedure<T extends Procedure> implements Writable {
   private long delayDuration;
   private Job job;
 
-  Procedure() {
+  public Procedure() {
   }
 
   public Procedure(String name, String nextProcedure, long delayDuration) {
