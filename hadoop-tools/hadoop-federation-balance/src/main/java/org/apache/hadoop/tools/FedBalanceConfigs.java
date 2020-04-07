@@ -7,6 +7,8 @@ public class FedBalanceConfigs {
   public static final String DISTCP_PROCEDURE_BAND_WIDTH_LIMIT =
       "distcp.procedure.bandwidth.limit";
   public static final int DISTCP_PROCEDURE_BAND_WIDTH_LIMIT_DEFAULT = 1;
-  public static final String CURRENT_SNAPSHOT_NAME = "DISTCP-BALANCE-CURRENT";
-  public static final String NEXT_SNAPSHOT_NAME = "DISTCP-BALANCE-NEXT";
+  public static final String LAST_SNAPSHOT_NAME = "DISTCP-BALANCE-CURRENT";
+  public static final String CURRENT_SNAPSHOT_NAME = "DISTCP-BALANCE-NEXT";
+  public static final String DISTCP_PROCEDURE_FORCE_CLOSE_OPEN_FILES =
+      "distcp.procedure.force.close.open.files";
 }

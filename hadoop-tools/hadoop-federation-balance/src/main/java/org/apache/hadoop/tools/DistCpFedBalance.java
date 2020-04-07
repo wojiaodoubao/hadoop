@@ -3,7 +3,11 @@ package org.apache.hadoop.tools;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
+import org.apache.hadoop.hdfs.protocol.OpenFilesIterator.OpenFilesType;
+import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.hdfs.server.namenode.procedure.Procedure;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
@@ -18,12 +22,16 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
 
 import static org.apache.hadoop.tools.DistCpFedBalance.DistCpProcedure.Stage.DIFF_DISTCP;
 import static org.apache.hadoop.tools.DistCpFedBalance.DistCpProcedure.Stage.INIT_DISTCP;
 import static org.apache.hadoop.tools.FedBalanceConfigs.*;
 
+/**
+ * Super user needed.
+ */
 public class DistCpFedBalance {
 
   static class FedBalanceContext implements Writable {
@@ -60,7 +68,7 @@ public class DistCpFedBalance {
     public static final Logger LOG =
         LoggerFactory.getLogger(DistCpProcedure.class);
     enum Stage {
-      PRE_CHECK, INIT_DISTCP, DIFF_DISTCP, FINAL_DISTCP, ERROR
+      PRE_CHECK, INIT_DISTCP, DIFF_DISTCP, FINAL_DISTCP, FINISH
     }
     private FedBalanceContext context;
     private Configuration conf;
@@ -68,7 +76,7 @@ public class DistCpFedBalance {
     private int bandWidth;
     private String jobId;
     private Stage stage;
-    private boolean firstDiff;
+    private boolean forceCloseOpenFiles;
     private JobClient client;
     private DistributedFileSystem srcFs;
     private DistributedFileSystem dstFs;
@@ -84,9 +92,10 @@ public class DistCpFedBalance {
           DISTCP_PROCEDURE_MAP_NUM_DEFAULT);
       this.bandWidth = conf.getInt(DISTCP_PROCEDURE_BAND_WIDTH_LIMIT,
           DISTCP_PROCEDURE_BAND_WIDTH_LIMIT_DEFAULT);
+      this.forceCloseOpenFiles =
+          conf.getBoolean(DISTCP_PROCEDURE_FORCE_CLOSE_OPEN_FILES, false);
       this.srcFs = (DistributedFileSystem) context.getSrc().getFileSystem(conf);
       this.dstFs = (DistributedFileSystem) context.getDst().getFileSystem(conf);
-      this.firstDiff = true;
     }
 
     @Override
@@ -104,8 +113,8 @@ public class DistCpFedBalance {
         return false;
       case FINAL_DISTCP:
         return false;
-      case ERROR:
-        return false;
+      case FINISH:
+        return true;
       }
       return false;
     }
@@ -154,25 +163,65 @@ public class DistCpFedBalance {
         if (job.isComplete()) {
           jobId = null;
           if (job.isSuccessful()) {
-            // TODO: compare snapshotDiff
-// 如果继续？
-//            srcFs.deleteSnapshot(context.getSrc(), CURRENT_SNAPSHOT_NAME);
-//            srcFs.renameSnapshot(context.getSrc(), NEXT_SNAPSHOT_NAME,
-//                CURRENT_SNAPSHOT_NAME);
-//            dstFs.deleteSnapshot(context.getDst(), CURRENT_SNAPSHOT_NAME);
+            LOG.info("DistCp succeeded. jobId={}", job.getFailureInfo());
           } else {
-            LOG.warn("DistCp failed. Failure: " + job.getFailureInfo());
+            LOG.warn("DistCp failed. jobId={} failure={}", job.getID(),
+                job.getFailureInfo());
           }
+        } else {
+          throw new RetryException();// wait job complete.
+        }
+      } else if (!verifyDiff()) {
+        if (!verifyOpenFiles()) {
+          stage = Stage.FINISH;
+        } else if (forceCloseOpenFiles) {
+          stage = Stage.FINAL_DISTCP;
         } else {
           throw new RetryException();
         }
       } else {
-//        dstFs.allowSnapshot(context.getDst());
-//        dstFs.createSnapshot(context.getDst(), CURRENT_SNAPSHOT_NAME);
-//        srcFs.createSnapshot(context.getSrc(), NEXT_SNAPSHOT_NAME);
-//        jobId = submitDistCpJob(context.getSrc().toString(),
-//            context.getDst().toString(), true);
+        if (!dstFs.exists(new Path(context.getDst(), ".snapshot"))) {
+          dstFs.allowSnapshot(context.getDst());
+        }
+        if (srcFs.exists(
+            new Path(context.getSrc(), ".snapshot/" + LAST_SNAPSHOT_NAME))) {
+          srcFs.deleteSnapshot(context.getSrc(), LAST_SNAPSHOT_NAME);
+        }
+        if (dstFs.exists(
+            new Path(context.getDst(), ".snapshot/" + LAST_SNAPSHOT_NAME))) {
+          dstFs.deleteSnapshot(context.getDst(), LAST_SNAPSHOT_NAME);
+        }
+        dstFs.createSnapshot(context.getDst(), LAST_SNAPSHOT_NAME);
+        srcFs.renameSnapshot(context.getSrc(), CURRENT_SNAPSHOT_NAME,
+            LAST_SNAPSHOT_NAME);
+        srcFs.createSnapshot(context.getSrc(), CURRENT_SNAPSHOT_NAME);
+        jobId = submitDistCpJob(context.getSrc().toString(),
+            context.getDst().toString(), true);
       }
+    }
+
+    /**
+     * Verify whether the src has changed since CURRENT_SNAPSHOT_NAME snapshot.
+     *
+     * @return true if the src has changed.
+     */
+    private boolean verifyDiff() throws IOException {
+      SnapshotDiffReport diffReport = srcFs
+          .getSnapshotDiffReport(context.getSrc(), CURRENT_SNAPSHOT_NAME,
+              "");
+      return diffReport.getDiffList().size() > 0;
+    }
+
+    /**
+     * Verify whether there is any open files under src.
+     *
+     * @return true if there are open files.
+     */
+    private boolean verifyOpenFiles() throws IOException {
+      RemoteIterator<OpenFileEntry> iterator = srcFs
+          .listOpenFiles(EnumSet.of(OpenFilesType.ALL_OPEN_FILES),
+              context.getSrc().toString());
+      return iterator.hasNext();
     }
 
     private RunningJob getCurrentJob() throws IOException {
@@ -187,7 +236,7 @@ public class DistCpFedBalance {
         dstFs.delete(context.getDst(), true);
       }
       srcFs.allowSnapshot(context.getSrc());
-      srcFs.deleteSnapshot(context.getSrc(), CURRENT_SNAPSHOT_NAME);
+      srcFs.deleteSnapshot(context.getSrc(), LAST_SNAPSHOT_NAME);
     }
 
     /**
@@ -199,8 +248,8 @@ public class DistCpFedBalance {
           new String[] { "-async", "-update", "-append", "-pruxgpcab" });
       if (useSnapshotDiff) {
         command.add("-diff");
+        command.add(LAST_SNAPSHOT_NAME);
         command.add(CURRENT_SNAPSHOT_NAME);
-        command.add(NEXT_SNAPSHOT_NAME);
       }
       command.add("-m");
       command.add(mapNum+"");
@@ -227,23 +276,23 @@ public class DistCpFedBalance {
     @Override
     public void write(DataOutput out) throws IOException {
       context.write(out);
-      out.write(mapNum);
-      out.write(bandWidth);
       Text.writeString(out, jobId);
       out.write(stage.ordinal());
-      out.writeBoolean(firstDiff);
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
       context.readFields(in);
-      mapNum = in.readInt();
-      bandWidth = in.readInt();
       jobId = Text.readString(in);
       stage = Stage.values()[in.readInt()];
       srcFs = (DistributedFileSystem) context.getSrc().getFileSystem(conf);
       dstFs = (DistributedFileSystem) context.getDst().getFileSystem(conf);
-      firstDiff = in.readBoolean();
+      mapNum = conf.getInt(DISTCP_PROCEDURE_MAP_NUM,
+          DISTCP_PROCEDURE_MAP_NUM_DEFAULT);
+      bandWidth = conf.getInt(DISTCP_PROCEDURE_BAND_WIDTH_LIMIT,
+          DISTCP_PROCEDURE_BAND_WIDTH_LIMIT_DEFAULT);
+      forceCloseOpenFiles =
+          conf.getBoolean(DISTCP_PROCEDURE_FORCE_CLOSE_OPEN_FILES, false);
     }
   }
 
