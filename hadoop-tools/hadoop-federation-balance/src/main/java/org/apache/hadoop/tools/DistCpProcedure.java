@@ -1,0 +1,389 @@
+package org.apache.hadoop.tools;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.fs.permission.AclStatus;
+import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
+import org.apache.hadoop.hdfs.protocol.OpenFilesIterator.OpenFilesType;
+import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
+import org.apache.hadoop.hdfs.protocol.proto.AclProtos;
+import org.apache.hadoop.hdfs.protocolPB.PBHelperClient;
+import org.apache.hadoop.hdfs.server.namenode.procedure.Procedure;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.JobClient;
+import org.apache.hadoop.mapred.JobID;
+import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.util.ToolRunner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.io.ByteArrayOutputStream;
+import java.io.ByteArrayInputStream;
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.List;
+
+import static org.apache.hadoop.tools.FedBalanceConfigs.*;
+
+/**
+ * Copy data through distcp. Super user privilege needed.
+ *
+ * PRE_CHECK               :pre-check of src and dst.
+ * INIT_DISTCP             :the first round of distcp.
+ * DIFF_DISTCP             :copy snapshot diff round by round until there is
+ *                          no diff.
+ * FINAL_DISTCP(optional)  :close all open files and do the final round distcp.
+ * FINISH                  :procedure finish.
+ */
+public class DistCpProcedure extends Procedure {
+
+  public static final Logger LOG =
+      LoggerFactory.getLogger(DistCpProcedure.class);
+
+  enum Stage {
+    PRE_CHECK, INIT_DISTCP, DIFF_DISTCP, FINAL_DISTCP, FINISH
+  }
+
+  private FedBalanceContext context;
+  private Configuration conf;
+  private int mapNum;
+  private int bandWidth;
+  private String jobId;
+  private Stage stage;
+  private boolean forceCloseOpenFiles;
+  private FsPermission fPerm;
+  private AclStatus acl;
+  private boolean savePermission;
+  private JobClient client;
+  private DistributedFileSystem srcFs;
+  private DistributedFileSystem dstFs;
+
+  public DistCpProcedure() {
+  }
+
+  public DistCpProcedure(FedBalanceContext context) throws IOException {
+    this.context = context;
+    this.conf = context.getConf();
+    this.client = new JobClient(conf);
+    this.stage = Stage.PRE_CHECK;
+    this.mapNum =
+        conf.getInt(DISTCP_PROCEDURE_MAP_NUM, DISTCP_PROCEDURE_MAP_NUM_DEFAULT);
+    this.bandWidth = conf.getInt(DISTCP_PROCEDURE_BAND_WIDTH_LIMIT,
+        DISTCP_PROCEDURE_BAND_WIDTH_LIMIT_DEFAULT);
+    this.forceCloseOpenFiles =
+        conf.getBoolean(DISTCP_PROCEDURE_FORCE_CLOSE_OPEN_FILES, false);
+    this.savePermission = true;
+    this.srcFs = (DistributedFileSystem) context.getSrc().getFileSystem(conf);
+    this.dstFs = (DistributedFileSystem) context.getDst().getFileSystem(conf);
+  }
+
+  @Override
+  public boolean execute(Procedure lastProcedure)
+      throws RetryException, IOException {
+    switch (stage) {
+    case PRE_CHECK:
+      preCheck();
+      return false;
+    case INIT_DISTCP:
+      initDistCp();
+      return false;
+    case DIFF_DISTCP:
+      diffDistCp();
+      return false;
+    case FINAL_DISTCP:
+      finalDistCp();
+      return false;
+    case FINISH:
+      return true;
+    }
+    return false;
+  }
+
+  private void preCheck() throws IOException {
+    DistributedFileSystem srcFs =
+        (DistributedFileSystem) context.getSrc().getFileSystem(conf);
+    DistributedFileSystem dstFs =
+        (DistributedFileSystem) context.getDst().getFileSystem(conf);
+    FileStatus status = srcFs.getFileStatus(context.getSrc());
+    if (!status.isDirectory()) {
+      throw new IOException(context.getSrc() + " doesn't exist.");
+    }
+    if (dstFs.exists(context.getDst())) {
+      throw new IOException(context.getDst() + " already exists.");
+    }
+    stage = Stage.INIT_DISTCP;
+  }
+
+  /**
+   * The initial distcp. Copying src to dst.
+   */
+  private void initDistCp() throws IOException, RetryException {
+    RunningJob job = getCurrentJob();
+    if (job != null) {
+      // the distcp has been submitted.
+      if (job.isComplete()) {
+        jobId = null;// unset jobId because the job is done.
+        if (job.isSuccessful()) {
+          stage = Stage.DIFF_DISTCP;
+          return;
+        } else {
+          LOG.warn("DistCp failed. Failure: " + job.getFailureInfo());
+        }
+      } else {
+        throw new RetryException();
+      }
+    } else {
+      cleanUpBeforeInitDistcp();
+      srcFs.createSnapshot(context.getSrc(), CURRENT_SNAPSHOT_NAME);
+      jobId = submitDistCpJob(
+          context.getSrc().toString() + "./snapshot/" + CURRENT_SNAPSHOT_NAME,
+          context.getDst().toString(), false);
+    }
+  }
+
+  /**
+   * The distcp copying diffs between LAST_SNAPSHOT_NAME and CURRENT_SNAPSHOT_NAME.
+   */
+  private void diffDistCp() throws IOException, RetryException {
+    RunningJob job = getCurrentJob();
+    if (job != null) {
+      if (job.isComplete()) {
+        jobId = null;
+        if (job.isSuccessful()) {
+          LOG.info("DistCp succeeded. jobId={}", job.getFailureInfo());
+        } else {
+          throw new RuntimeException(
+              "DistCp failed. jobId=" + job.getID() + "failure=" + job
+                  .getFailureInfo());
+        }
+      } else {
+        throw new RetryException();// wait job complete.
+      }
+    } else if (!verifyDiff()) {
+      if (!verifyOpenFiles()) {
+        stage = Stage.FINISH;
+      } else if (forceCloseOpenFiles) {
+        stage = Stage.FINAL_DISTCP;
+      } else {
+        throw new RetryException();
+      }
+    } else {
+      submitDiffDistCp();
+    }
+  }
+
+  /**
+   * Close all open files then submit the distcp with -diff.
+   */
+  private void finalDistCp() throws IOException, RetryException {
+    // Cancel x permission, close all open files then do the final distcp.
+    if (savePermission) {
+      FileStatus status = srcFs.getFileStatus(context.getSrc());
+      fPerm = status.getPermission();
+      acl = srcFs.getAclStatus(context.getSrc());
+      srcFs.setPermission(context.getSrc(),
+          FsPermission.createImmutable((short) 0));
+      savePermission = false;
+    }
+    closeAllOpenFiles(srcFs, context.getSrc().toString());
+    // final distcp.
+    RunningJob job = getCurrentJob();
+    if (job != null) {
+      // the distcp has been submitted.
+      if (job.isComplete()) {
+        jobId = null;// unset jobId because the job is done.
+        if (job.isSuccessful()) {
+          // restore permission.
+          dstFs.removeAcl(context.getDst());
+          if (acl != null) {
+            dstFs.modifyAclEntries(context.getDst(), acl.getEntries());
+          }
+          dstFs.setPermission(context.getDst(), fPerm);
+          stage = Stage.FINISH;
+          return;
+        } else {
+          throw new RuntimeException(
+              "Final DistCp failed. Failure: " + job.getFailureInfo());
+        }
+      } else {
+        throw new RetryException();
+      }
+    } else {
+      submitDiffDistCp();
+    }
+  }
+
+  private void submitDiffDistCp() throws IOException {
+    if (!dstFs.exists(new Path(context.getDst(), ".snapshot"))) {
+      dstFs.allowSnapshot(context.getDst());
+    }
+    if (srcFs.exists(
+        new Path(context.getSrc(), ".snapshot/" + LAST_SNAPSHOT_NAME))) {
+      srcFs.deleteSnapshot(context.getSrc(), LAST_SNAPSHOT_NAME);
+    }
+    if (dstFs.exists(
+        new Path(context.getDst(), ".snapshot/" + LAST_SNAPSHOT_NAME))) {
+      dstFs.deleteSnapshot(context.getDst(), LAST_SNAPSHOT_NAME);
+    }
+    dstFs.createSnapshot(context.getDst(), LAST_SNAPSHOT_NAME);
+    srcFs.renameSnapshot(context.getSrc(), CURRENT_SNAPSHOT_NAME,
+        LAST_SNAPSHOT_NAME);
+    srcFs.createSnapshot(context.getSrc(), CURRENT_SNAPSHOT_NAME);
+    jobId = submitDistCpJob(context.getSrc().toString(),
+        context.getDst().toString(), true);
+  }
+
+  /**
+   * Close all open files. Block until all the files are closed.
+   */
+  private void closeAllOpenFiles(DistributedFileSystem dfs, String path)
+      throws IOException {
+    while (true) {
+      RemoteIterator<OpenFileEntry> iterator =
+          dfs.listOpenFiles(EnumSet.of(OpenFilesType.ALL_OPEN_FILES), path);
+      if (!iterator.hasNext()) { // all files has been closed.
+        break;
+      }
+      while (iterator.hasNext()) {
+        OpenFileEntry e = iterator.next();
+        try {
+          srcFs.recoverLease(new Path(e.getFilePath()));
+        } catch (IOException re) {
+          // ignore recoverLease error.
+        }
+      }
+    }
+  }
+
+  /**
+   * Verify whether the src has changed since CURRENT_SNAPSHOT_NAME snapshot.
+   *
+   * @return true if the src has changed.
+   */
+  private boolean verifyDiff() throws IOException {
+    SnapshotDiffReport diffReport = srcFs
+        .getSnapshotDiffReport(context.getSrc(), CURRENT_SNAPSHOT_NAME, "");
+    return diffReport.getDiffList().size() > 0;
+  }
+
+  /**
+   * Verify whether there is any open files under src.
+   *
+   * @return true if there are open files.
+   */
+  private boolean verifyOpenFiles() throws IOException {
+    RemoteIterator<OpenFileEntry> iterator = srcFs
+        .listOpenFiles(EnumSet.of(OpenFilesType.ALL_OPEN_FILES),
+            context.getSrc().toString());
+    return iterator.hasNext();
+  }
+
+  private RunningJob getCurrentJob() throws IOException {
+    if (jobId != null) {
+      return client.getJob(JobID.forName(jobId));
+    }
+    return null;
+  }
+
+  private void cleanUpBeforeInitDistcp() throws IOException {
+    if (dstFs.exists(context.getDst())) { // clean up.
+      dstFs.delete(context.getDst(), true);
+    }
+    srcFs.allowSnapshot(context.getSrc());
+    srcFs.deleteSnapshot(context.getSrc(), LAST_SNAPSHOT_NAME);
+  }
+
+  /**
+   * Submit distcp job and return jobId;
+   */
+  private String submitDistCpJob(String src, String dst,
+      boolean useSnapshotDiff) throws IOException {
+    List<String> command = Arrays
+        .asList(new String[] { "-async", "-update", "-append", "-pruxgpcab" });
+    if (useSnapshotDiff) {
+      command.add("-diff");
+      command.add(LAST_SNAPSHOT_NAME);
+      command.add(CURRENT_SNAPSHOT_NAME);
+    }
+    command.add("-m");
+    command.add(mapNum + "");
+    command.add("-bandwidth");
+    command.add(bandWidth + "");
+    command.add(src);
+    command.add(dst);
+
+    int exitCode;
+    Configuration config = new Configuration(conf);
+    try {
+      exitCode = ToolRunner
+          .run(config, new DistCp(), command.toArray(new String[] {}));
+    } catch (Exception e) {
+      throw new IOException("Submit job failed.", e);
+    }
+    if (exitCode != 0) {
+      throw new IOException("Exit code is not zero. exit code=" + exitCode);
+    }
+    String jobID = config.get(DistCpConstants.CONF_LABEL_DISTCP_JOB_ID);
+    return jobID;
+  }
+
+  @Override
+  public void write(DataOutput out) throws IOException {
+    context.write(out);
+    Text.writeString(out, jobId);
+    out.write(stage.ordinal());
+    if (fPerm == null) {
+      out.writeBoolean(false);
+    } else {
+      out.writeBoolean(true);
+      out.write(fPerm.toShort());
+    }
+    if (acl == null) {
+      out.writeBoolean(false);
+    } else {
+      out.writeBoolean(true);
+      ByteArrayOutputStream bout = new ByteArrayOutputStream();
+      PBHelperClient.convert(acl).writeDelimitedTo(bout);
+      byte[] data = bout.toByteArray();
+      out.writeInt(data.length);
+      out.write(data);
+    }
+    out.writeBoolean(savePermission);
+  }
+
+  @Override
+  public void readFields(DataInput in) throws IOException {
+    context = new FedBalanceContext();
+    context.readFields(in);
+    jobId = Text.readString(in);
+    stage = Stage.values()[in.readInt()];
+    if (in.readBoolean()) {
+      fPerm = FsPermission.read(in);
+    }
+    if (in.readBoolean()) {
+      int len = in.readInt();
+      byte[] data = new byte[len];
+      in.readFully(data);
+      ByteArrayInputStream bin = new ByteArrayInputStream(data);
+      AclProtos.GetAclStatusResponseProto proto =
+          AclProtos.GetAclStatusResponseProto.parseDelimitedFrom(bin);
+      acl = PBHelperClient.convert(proto);
+    }
+    savePermission = in.readBoolean();
+    srcFs = (DistributedFileSystem) context.getSrc().getFileSystem(conf);
+    dstFs = (DistributedFileSystem) context.getDst().getFileSystem(conf);
+    mapNum =
+        conf.getInt(DISTCP_PROCEDURE_MAP_NUM, DISTCP_PROCEDURE_MAP_NUM_DEFAULT);
+    bandWidth = conf.getInt(DISTCP_PROCEDURE_BAND_WIDTH_LIMIT,
+        DISTCP_PROCEDURE_BAND_WIDTH_LIMIT_DEFAULT);
+    forceCloseOpenFiles =
+        conf.getBoolean(DISTCP_PROCEDURE_FORCE_CLOSE_OPEN_FILES, false);
+  }
+}
