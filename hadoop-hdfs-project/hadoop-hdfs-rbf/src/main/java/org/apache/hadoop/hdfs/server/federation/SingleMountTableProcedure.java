@@ -1,4 +1,4 @@
-package org.apache.hadoop.tools;
+package org.apache.hadoop.hdfs.server.federation;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
@@ -11,6 +11,7 @@ import org.apache.hadoop.hdfs.server.federation.store.protocol.UpdateMountTableE
 import org.apache.hadoop.hdfs.server.federation.store.protocol.UpdateMountTableEntryResponse;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
 import org.apache.hadoop.hdfs.server.namenode.procedure.Procedure;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.net.NetUtils;
 
 import java.io.DataInput;
@@ -18,7 +19,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -28,16 +28,29 @@ import java.util.List;
  * New mount table:
  *   /a/b/c -> {ns:dst path:/a/b/c}
  */
-public class SymmetricalMountTableProcedure extends Procedure {
+public class SingleMountTableProcedure extends Procedure {
 
-  private FedBalanceContext context;
+  private String fedPath;
+  private String dstPath;
+  private String dstNs;
   private Configuration conf;
+  private RouterClient rClient;
 
-  public SymmetricalMountTableProcedure() {}
+  public SingleMountTableProcedure() {}
 
-  public SymmetricalMountTableProcedure(FedBalanceContext context) {
-    this.context = context;
-    this.conf = context.getConf();
+  /**
+   * Update mount entry fedPath to specified dst uri.
+   *
+   * @param fedPath the federation path to be updated.
+   * @param dst the sub-cluster uri of the dst path.
+   * @param conf the configuration.
+   */
+  public SingleMountTableProcedure(String fedPath, String dstPath, String dstNs,
+      Configuration conf) {
+    this.fedPath = fedPath;
+    this.dstPath = dstPath;
+    this.dstNs = dstNs;
+    this.conf = conf;
   }
 
   @Override
@@ -52,24 +65,22 @@ public class SymmetricalMountTableProcedure extends Procedure {
         RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_KEY,
         RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_DEFAULT);
     InetSocketAddress routerSocket = NetUtils.createSocketAddr(address);
-    RouterClient rClient = new RouterClient(routerSocket, conf);
+    rClient = new RouterClient(routerSocket, conf);
     MountTableManager mountTable = rClient.getMountTableManager();
 
-    String fPath = context.getFederationPath();
-    MountTable originalEntry = getMountEntry(fPath, mountTable);
+    MountTable originalEntry = getMountEntry(fedPath, mountTable);
     if (originalEntry == null) {
-      throw new RuntimeException("Mount table " + fPath + " doesn't exist");
+      throw new RuntimeException("Mount table " + fedPath + " doesn't exist");
     } else {
-      String dstNs = context.getDst().toUri().getAuthority();
-      RemoteLocation remoteLocation = new RemoteLocation(dstNs, fPath, fPath);
-      originalEntry.setDestinations(
-          Collections.list(new Arrays.asList(remoteLocation)));
+      RemoteLocation remoteLocation =
+          new RemoteLocation(dstNs, dstPath, fedPath);
+      originalEntry.setDestinations(Arrays.asList(remoteLocation));
       UpdateMountTableEntryRequest updateRequest =
           UpdateMountTableEntryRequest.newInstance(originalEntry);
       UpdateMountTableEntryResponse response =
-          mountTable.updateMountTableEntry(updateRequest)
+          mountTable.updateMountTableEntry(updateRequest);
       if (!response.getStatus()) {
-        throw new RuntimeException("Failed update mount table " + fPath);
+        throw new RuntimeException("Failed update mount table " + fedPath);
       }
     }
   }
@@ -81,7 +92,8 @@ public class SymmetricalMountTableProcedure extends Procedure {
    * @return corresponding mount entry.
    * @throws IOException in case of failure to retrieve mount entry.
    */
-  private MountTable getMountEntry(String mount, MountTableManager mountTable)
+  public static MountTable getMountEntry(String mount,
+      MountTableManager mountTable)
       throws IOException {
     GetMountTableEntriesRequest getRequest =
         GetMountTableEntriesRequest.newInstance(mount);
@@ -99,13 +111,16 @@ public class SymmetricalMountTableProcedure extends Procedure {
 
   @Override
   public void write(DataOutput out) throws IOException {
-    context.write(out);
+    Text.writeString(out, fedPath);
+    Text.writeString(out, dstNs);
+    conf.write(out);
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
-    context = new FedBalanceContext();
-    context.readFields(in);
-    conf = context.getConf();
+    fedPath = Text.readString(in);
+    dstNs = Text.readString(in);
+    conf = new Configuration(false);
+    conf.readFields(in);
   }
 }

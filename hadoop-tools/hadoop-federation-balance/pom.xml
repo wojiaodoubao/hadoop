@@ -102,18 +102,21 @@
       <artifactId>assertj-core</artifactId>
       <scope>test</scope>
     </dependency>
-      <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-distcp</artifactId>
-      </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-distcp</artifactId>
+      <scope>provided</scope>
     </dependency>
-      <dependency>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-hdfs-rbf</artifactId>
-      </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-distcp</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-hdfs-rbf</artifactId>
+      <scope>provided</scope>
+    </dependency>
   </dependencies>
 
   <build>

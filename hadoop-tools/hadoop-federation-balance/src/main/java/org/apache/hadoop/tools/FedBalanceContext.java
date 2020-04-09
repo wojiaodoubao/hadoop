@@ -11,10 +11,17 @@ import java.io.IOException;
 
 public class FedBalanceContext implements Writable {
 
-  private String federationPath;
   private Path src;
   private Path dst;
   private Configuration conf;
+
+  public FedBalanceContext() {}
+
+  public FedBalanceContext(Path src, Path dst, Configuration conf) {
+    this.src = src;
+    this.dst = dst;
+    this.conf = conf;
+  }
 
   public Configuration getConf() {
     return conf;
@@ -28,16 +35,11 @@ public class FedBalanceContext implements Writable {
     return dst;
   }
 
-  public String getFederationPath() {
-    return federationPath;
-  }
-
   @Override
   public void write(DataOutput out) throws IOException {
     conf.write(out);
     Text.writeString(out, src.toString());
     Text.writeString(out, dst.toString());
-    Text.writeString(out, federationPath);
   }
 
   @Override
@@ -46,6 +48,5 @@ public class FedBalanceContext implements Writable {
     conf.readFields(in);
     src = new Path(Text.readString(in));
     dst = new Path(Text.readString(in));
-    federationPath = Text.readString(in);
   }
 }
