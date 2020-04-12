@@ -47,7 +47,8 @@ public class DistCpFedBalance extends Configured implements Tool {
     ProcedureScheduler scheduler = new ProcedureScheduler(getConf());
     scheduler.init();
     try {
-      DistCpProcedure dcp = new DistCpProcedure(context);
+      DistCpProcedure dcp =
+          new DistCpProcedure("distcp-procedure", null, 1000, context);
       SingleMountTableProcedure smtp =
           new SingleMountTableProcedure(fedPath, dst.toUri().getPath(),
               dst.toUri().getAuthority(), getConf());

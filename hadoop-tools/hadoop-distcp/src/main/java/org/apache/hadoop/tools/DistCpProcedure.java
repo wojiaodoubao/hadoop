@@ -26,6 +26,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.io.ByteArrayOutputStream;
 import java.io.ByteArrayInputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
@@ -68,7 +69,9 @@ public class DistCpProcedure extends Procedure {
   public DistCpProcedure() {
   }
 
-  public DistCpProcedure(FedBalanceContext context) throws IOException {
+  public DistCpProcedure(String name, String nextProcedure, long delayDuration,
+      FedBalanceContext context) throws IOException {
+    super(name, nextProcedure, delayDuration);
     this.context = context;
     this.conf = context.getConf();
     this.client = new JobClient(conf);
@@ -143,7 +146,7 @@ public class DistCpProcedure extends Procedure {
       cleanUpBeforeInitDistcp();
       srcFs.createSnapshot(context.getSrc(), CURRENT_SNAPSHOT_NAME);
       jobId = submitDistCpJob(
-          context.getSrc().toString() + "./snapshot/" + CURRENT_SNAPSHOT_NAME,
+          context.getSrc().toString() + "/.snapshot/" + CURRENT_SNAPSHOT_NAME,
           context.getDst().toString(), false);
     }
   }
@@ -297,7 +300,10 @@ public class DistCpProcedure extends Procedure {
       dstFs.delete(context.getDst(), true);
     }
     srcFs.allowSnapshot(context.getSrc());
-    srcFs.deleteSnapshot(context.getSrc(), LAST_SNAPSHOT_NAME);
+    if (srcFs.exists(
+        new Path(context.getSrc(), ".snapshot/" + CURRENT_SNAPSHOT_NAME))) {
+      srcFs.deleteSnapshot(context.getSrc(), CURRENT_SNAPSHOT_NAME);
+    }
   }
 
   /**
@@ -305,8 +311,9 @@ public class DistCpProcedure extends Procedure {
    */
   private String submitDistCpJob(String src, String dst,
       boolean useSnapshotDiff) throws IOException {
-    List<String> command = Arrays
-        .asList(new String[] { "-async", "-update", "-append", "-pruxgpcab" });
+    List<String> command = new ArrayList<>();
+    command.addAll(Arrays
+        .asList(new String[] { "-async", "-update", "-append", "-pruxgpcab" }));
     if (useSnapshotDiff) {
       command.add("-diff");
       command.add(LAST_SNAPSHOT_NAME);
@@ -321,23 +328,33 @@ public class DistCpProcedure extends Procedure {
 
     int exitCode;
     Configuration config = new Configuration(conf);
+    DistCp distCp;
     try {
+      distCp = new DistCp();
+      //TODO createAndSubmitJob
       exitCode = ToolRunner
-          .run(config, new DistCp(), command.toArray(new String[] {}));
+          .run(config, distCp, command.toArray(new String[] {}));
     } catch (Exception e) {
       throw new IOException("Submit job failed.", e);
     }
     if (exitCode != 0) {
       throw new IOException("Exit code is not zero. exit code=" + exitCode);
     }
-    String jobID = config.get(DistCpConstants.CONF_LABEL_DISTCP_JOB_ID);
+    String jobID =
+        distCp.getConf().get(DistCpConstants.CONF_LABEL_DISTCP_JOB_ID);
     return jobID;
   }
 
   @Override
   public void write(DataOutput out) throws IOException {
+    super.write(out);
     context.write(out);
-    Text.writeString(out, jobId);
+    if (jobId == null) {
+      out.writeBoolean(false);
+    } else {
+      out.writeBoolean(true);
+      Text.writeString(out, jobId);
+    }
     out.write(stage.ordinal());
     if (fPerm == null) {
       out.writeBoolean(false);
@@ -360,9 +377,12 @@ public class DistCpProcedure extends Procedure {
 
   @Override
   public void readFields(DataInput in) throws IOException {
+    super.readFields(in);
     context = new FedBalanceContext();
     context.readFields(in);
-    jobId = Text.readString(in);
+    if (in.readBoolean()) {
+      jobId = Text.readString(in);
+    }
     stage = Stage.values()[in.readInt()];
     if (in.readBoolean()) {
       fPerm = FsPermission.read(in);
