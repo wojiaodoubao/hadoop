@@ -9,6 +9,10 @@ import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.server.namenode.procedure.Job;
 import org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureScheduler;
+import org.apache.hadoop.mapreduce.MRJobConfig;
+import org.apache.hadoop.mapreduce.v2.MiniMRYarnCluster;
+import org.apache.hadoop.service.AbstractService;
+import org.apache.hadoop.yarn.server.MiniYARNCluster;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -25,6 +29,7 @@ import static org.junit.Assert.assertNull;
 
 public class TestDistCpProcedure {
   private static MiniDFSCluster cluster;
+  private static MiniMRYarnCluster mrCluster;
   private static Configuration conf;
   private static final String SRCDAT = "srcdat";
   private static final String DSTDAT = "dstdat";
@@ -37,6 +42,14 @@ public class TestDistCpProcedure {
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_SIZE);
     cluster = new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
     cluster.waitActive();
+
+    mrCluster = new MiniMRYarnCluster(TestDistCpProcedure.class.getName(), 3);
+    conf.set("fs.defaultFS", cluster.getFileSystem().getUri().toString());
+    conf.set(MRJobConfig.MR_AM_STAGING_DIR, "/apps_staging_dir");
+    mrCluster.init(conf);
+    mrCluster.start();
+    conf = mrCluster.getConfig();
+
     String workPath =
         "hdfs://" + cluster.getNameNode().getHostAndPort() + "/procedure";
     conf.set(SCHEDULER_BASE_URI, workPath);
@@ -44,6 +57,9 @@ public class TestDistCpProcedure {
 
   @AfterClass
   public static void afterClass() throws IOException {
+    if (mrCluster != null) {
+      mrCluster.close();
+    }
     if (cluster != null) {
       cluster.shutdown();
     }
