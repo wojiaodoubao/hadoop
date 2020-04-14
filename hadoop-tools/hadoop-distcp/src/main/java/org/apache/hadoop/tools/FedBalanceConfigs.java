@@ -11,4 +11,7 @@ public class FedBalanceConfigs {
   public static final String CURRENT_SNAPSHOT_NAME = "DISTCP-BALANCE-NEXT";
   public static final String DISTCP_PROCEDURE_FORCE_CLOSE_OPEN_FILES =
       "distcp.procedure.force.close.open.files";
+  public static final String DISTCP_PROCEDURE_MOVE_TO_TRASH =
+      "distcp.procedure.move.to.trash";
+  public static final boolean DISTCP_PROCEDURE_MOVE_TO_TRASH_DEFAULT = true;
 }

@@ -4,6 +4,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
@@ -17,6 +18,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobID;
 import org.apache.hadoop.mapred.RunningJob;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.util.ToolRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +33,7 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 import static org.apache.hadoop.tools.FedBalanceConfigs.*;
 
 /**
@@ -104,22 +107,22 @@ public class DistCpProcedure extends Procedure {
       finalDistCp();
       return false;
     case FINISH:
+      finish();
       return true;
     }
     return false;
   }
 
   private void preCheck() throws IOException {
-    DistributedFileSystem srcFs =
-        (DistributedFileSystem) context.getSrc().getFileSystem(conf);
-    DistributedFileSystem dstFs =
-        (DistributedFileSystem) context.getDst().getFileSystem(conf);
     FileStatus status = srcFs.getFileStatus(context.getSrc());
     if (!status.isDirectory()) {
       throw new IOException(context.getSrc() + " doesn't exist.");
     }
     if (dstFs.exists(context.getDst())) {
       throw new IOException(context.getDst() + " already exists.");
+    }
+    if (srcFs.exists(new Path(context.getSrc(), ".snapshot"))) {
+      throw new IOException(context.getSrc() + " shouldn't enable snapshot.");
     }
     stage = Stage.INIT_DISTCP;
   }
@@ -223,18 +226,28 @@ public class DistCpProcedure extends Procedure {
     }
   }
 
+  private void finish() throws IOException {
+    if (srcFs.exists(context.getSrc())) {
+      cleanupSnapshot(srcFs, context.getSrc());
+      if (conf.getBoolean(DISTCP_PROCEDURE_MOVE_TO_TRASH, DISTCP_PROCEDURE_MOVE_TO_TRASH_DEFAULT)) {
+        conf.setFloat(FS_TRASH_INTERVAL_KEY, 1);
+        if (!Trash.moveToAppropriateTrash(srcFs, context.getSrc(), conf)) {
+          throw new RuntimeException(
+              "Failed move " + context.getSrc() + " to trash.");
+        }
+      } else {
+        if (!srcFs.delete(context.getSrc(), true)) {
+          throw new RuntimeException("Failed delete " + context.getSrc());
+        }
+      }
+    }
+    cleanupSnapshot(dstFs, context.getDst());
+  }
+
   private void submitDiffDistCp() throws IOException {
-    if (!dstFs.exists(new Path(context.getDst(), ".snapshot"))) {
-      dstFs.allowSnapshot(context.getDst());
-    }
-    if (srcFs.exists(
-        new Path(context.getSrc(), ".snapshot/" + LAST_SNAPSHOT_NAME))) {
-      srcFs.deleteSnapshot(context.getSrc(), LAST_SNAPSHOT_NAME);
-    }
-    if (dstFs.exists(
-        new Path(context.getDst(), ".snapshot/" + LAST_SNAPSHOT_NAME))) {
-      dstFs.deleteSnapshot(context.getDst(), LAST_SNAPSHOT_NAME);
-    }
+    enableSnapshot(dstFs, context.getDst());
+    deleteSnapshot(srcFs, context.getSrc(), LAST_SNAPSHOT_NAME);
+    deleteSnapshot(dstFs, context.getDst(), LAST_SNAPSHOT_NAME);
     dstFs.createSnapshot(context.getDst(), LAST_SNAPSHOT_NAME);
     srcFs.renameSnapshot(context.getSrc(), CURRENT_SNAPSHOT_NAME,
         LAST_SNAPSHOT_NAME);
@@ -326,23 +339,16 @@ public class DistCpProcedure extends Procedure {
     command.add(src);
     command.add(dst);
 
-    int exitCode;
     Configuration config = new Configuration(conf);
     DistCp distCp;
     try {
-      distCp = new DistCp();
-      //TODO createAndSubmitJob
-      exitCode = ToolRunner
-          .run(config, distCp, command.toArray(new String[] {}));
+      distCp = new DistCp(config,
+          OptionsParser.parse(command.toArray(new String[]{})));
+      Job job = distCp.createAndSubmitJob();
+      return job.getJobID().toString();
     } catch (Exception e) {
       throw new IOException("Submit job failed.", e);
     }
-    if (exitCode != 0) {
-      throw new IOException("Exit code is not zero. exit code=" + exitCode);
-    }
-    String jobID =
-        distCp.getConf().get(DistCpConstants.CONF_LABEL_DISTCP_JOB_ID);
-    return jobID;
   }
 
   @Override
@@ -405,5 +411,31 @@ public class DistCpProcedure extends Procedure {
         DISTCP_PROCEDURE_BAND_WIDTH_LIMIT_DEFAULT);
     forceCloseOpenFiles =
         conf.getBoolean(DISTCP_PROCEDURE_FORCE_CLOSE_OPEN_FILES, false);
+  }
+
+  private static void enableSnapshot(DistributedFileSystem dfs, Path path)
+      throws IOException {
+    if (!dfs.exists(new Path(path, ".snapshot"))) {
+      dfs.allowSnapshot(path);
+    }
+  }
+
+  private static void deleteSnapshot(DistributedFileSystem dfs, Path path,
+      String snapshotName) throws IOException {
+    Path snapshot = new Path(path, ".snapshot/" + snapshotName);
+    if (dfs.exists(snapshot)) {
+      dfs.deleteSnapshot(path, snapshotName);
+    }
+  }
+
+  private static void cleanupSnapshot(DistributedFileSystem dfs, Path path)
+      throws IOException {
+    if (dfs.exists(new Path(path, ".snapshot"))) {
+      FileStatus[] status = dfs.listStatus(new Path(path, ".snapshot"));
+      for (FileStatus s : status) {
+        deleteSnapshot(dfs, path, s.getPath().getName());
+      }
+      dfs.disallowSnapshot(path);
+    }
   }
 }

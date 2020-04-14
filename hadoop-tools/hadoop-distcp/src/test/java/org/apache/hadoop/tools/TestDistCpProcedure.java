@@ -24,8 +24,7 @@ import java.util.Random;
 import static junit.framework.TestCase.assertTrue;
 import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.SCHEDULER_BASE_URI;
 import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
+import static org.junit.Assert.*;
 
 public class TestDistCpProcedure {
   private static MiniDFSCluster cluster;
@@ -67,7 +66,7 @@ public class TestDistCpProcedure {
 
   @Test
   public void testSuccessfulDistCpProcedure() throws Exception {
-    String testRoot = "/testdir." + getMethodName();
+    String testRoot = "/user/foo/testdir." + getMethodName();
     FileEntry[] srcfiles = {
         new FileEntry(SRCDAT, true),
         new FileEntry(SRCDAT + "/a", false),
@@ -97,6 +96,7 @@ public class TestDistCpProcedure {
     }
     assertNull(balanceJob.error());
     assertTrue(fs.exists(dst));
+    assertFalse(fs.exists(src));
   }
 
   private class FileEntry {
