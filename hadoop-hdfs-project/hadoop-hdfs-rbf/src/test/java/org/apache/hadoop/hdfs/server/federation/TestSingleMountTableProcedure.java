@@ -13,7 +13,6 @@ import org.apache.hadoop.hdfs.server.federation.store.protocol.AddMountTableEntr
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesRequest;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesResponse;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
-import org.apache.hadoop.hdfs.server.namenode.procedure.Procedure;
 import org.apache.hadoop.util.Time;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -21,9 +20,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster.RouterContext;
 
-import java.io.IOException;
+import java.io.*;
 import java.net.InetSocketAddress;
-import java.net.URISyntaxException;
 import java.util.Collections;
 import java.util.List;
 
@@ -108,7 +106,8 @@ public class TestSingleMountTableProcedure {
     // test SingleMountTableProcedure updates the mount point.
     String dstNs = "ns1";
     SingleMountTableProcedure smtp =
-        new SingleMountTableProcedure(fedPath, dst, dstNs, routerConf);
+        new SingleMountTableProcedure("single-mount-table-procedure", null,
+            1000, fedPath, dst, dstNs, routerConf);
     assertTrue(smtp.execute(null));
     stateStore.loadCache(MountTableStoreImpl.class, true);// load cache.
     // verify the mount entry is updated to /
@@ -120,5 +119,24 @@ public class TestSingleMountTableProcedure {
     String dstPath = entry.getDestinations().get(0).getDest();
     assertEquals(dstNs, nsId);
     assertEquals(dst, dstPath);
+  }
+
+  @Test
+  public void testSeDe() throws Exception {
+    String fedPath = "/test-path";
+    String dst = "/test-dst";
+    String dstNs = "ns1";
+    SingleMountTableProcedure smtp =
+        new SingleMountTableProcedure("single-mount-table-procedure", null,
+            1000, fedPath, dst, dstNs, routerConf);
+    ByteArrayOutputStream bao = new ByteArrayOutputStream();
+    DataOutput dataOut = new DataOutputStream(bao);
+    smtp.write(dataOut);
+    smtp = new SingleMountTableProcedure();
+    smtp.readFields(
+        new DataInputStream(new ByteArrayInputStream(bao.toByteArray())));
+    assertEquals(fedPath, smtp.getFedPath());
+    assertEquals(dst, smtp.getDstPath());
+    assertEquals(dstNs, smtp.getDstNs());
   }
 }

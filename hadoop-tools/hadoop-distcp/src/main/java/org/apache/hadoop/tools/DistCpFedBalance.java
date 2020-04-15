@@ -2,7 +2,6 @@ package org.apache.hadoop.tools;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 
 import org.apache.hadoop.hdfs.server.federation.SingleMountTableProcedure;
@@ -20,6 +19,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 
 /**
  * Move mount entry and data to a new sub-cluster using distcp.
@@ -29,19 +30,18 @@ public class DistCpFedBalance extends Configured implements Tool {
   public static final Logger LOG =
       LoggerFactory.getLogger(DistCpFedBalance.class);
 
-  public DistCpFedBalance(Configuration conf) {
-    super(conf);
+  public DistCpFedBalance() {
+    super();
   }
 
-  /**
-   * Usage:
-   *
-   */
   @Override
   public int run(String[] args) throws Exception {
+    if (args.length < 2) {
+      System.out.println("usage: fedbalance [source_mount_point] [target_path]");
+    }
     String fedPath = args[0];
-    Path src = getSrcPath(fedPath);
-    Path dst = new Path(args[1]);
+    URI src = getSrcPath(fedPath);
+    URI dst = new URI(args[1]);
     FedBalanceContext context = new FedBalanceContext(src, dst, getConf());
 
     ProcedureScheduler scheduler = new ProcedureScheduler(getConf());
@@ -50,10 +50,11 @@ public class DistCpFedBalance extends Configured implements Tool {
       DistCpProcedure dcp =
           new DistCpProcedure("distcp-procedure", null, 1000, context);
       SingleMountTableProcedure smtp =
-          new SingleMountTableProcedure(fedPath, dst.toUri().getPath(),
-              dst.toUri().getAuthority(), getConf());
-      Job balanceJob =
-          new Job.Builder<>().nextProcedure(dcp).nextProcedure(smtp).build();
+          new SingleMountTableProcedure("single-mount-table-procedure", null,
+              1000, fedPath, dst.getPath(), dst.getAuthority(), getConf());
+      TrashProcedure tp = new TrashProcedure("trash-procedure", null, 1000, context);
+      Job balanceJob = new Job.Builder<>().nextProcedure(dcp)
+          .nextProcedure(smtp).nextProcedure(tp).build();
       scheduler.submit(balanceJob);
       scheduler.waitUntilDone(balanceJob);
     } catch (IOException e) {
@@ -66,7 +67,8 @@ public class DistCpFedBalance extends Configured implements Tool {
   /**
    * Get src uri from Router.
    */
-  private Path getSrcPath(String fedPath) throws IOException {
+  private URI getSrcPath(String fedPath) throws IOException,
+      URISyntaxException {
     String address = getConf().getTrimmed(
         RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_KEY,
         RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_DEFAULT);
@@ -84,7 +86,7 @@ public class DistCpFedBalance extends Configured implements Tool {
     } else {
       String ns = entry.getDestinations().get(0).getNameserviceId();
       String path = entry.getDestinations().get(0).getDest();
-      return new Path("hdfs://" + ns, path);
+      return new URI("hdfs://" + ns + path);
     }
   }
 

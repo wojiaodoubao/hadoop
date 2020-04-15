@@ -1,5 +1,6 @@
 package org.apache.hadoop.hdfs.server.federation;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
 import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
@@ -42,11 +43,13 @@ public class SingleMountTableProcedure extends Procedure {
    * Update mount entry fedPath to specified dst uri.
    *
    * @param fedPath the federation path to be updated.
-   * @param dst the sub-cluster uri of the dst path.
+   * @param dstPath the sub-cluster uri of the dst path.
    * @param conf the configuration.
    */
-  public SingleMountTableProcedure(String fedPath, String dstPath, String dstNs,
+  public SingleMountTableProcedure(String name, String nextProcedure,
+      long delayDuration, String fedPath, String dstPath, String dstNs,
       Configuration conf) {
+    super(name, nextProcedure, delayDuration);
     this.fedPath = fedPath;
     this.dstPath = dstPath;
     this.dstNs = dstNs;
@@ -111,16 +114,35 @@ public class SingleMountTableProcedure extends Procedure {
 
   @Override
   public void write(DataOutput out) throws IOException {
+    super.write(out);
     Text.writeString(out, fedPath);
+    Text.writeString(out, dstPath);
     Text.writeString(out, dstNs);
     conf.write(out);
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
+    super.readFields(in);
     fedPath = Text.readString(in);
+    dstPath = Text.readString(in);
     dstNs = Text.readString(in);
     conf = new Configuration(false);
     conf.readFields(in);
+  }
+
+  @VisibleForTesting
+  String getFedPath() {
+    return fedPath;
+  }
+
+  @VisibleForTesting
+  String getDstPath() {
+    return dstPath;
+  }
+
+  @VisibleForTesting
+  String getDstNs() {
+    return dstNs;
   }
 }

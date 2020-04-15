@@ -1,6 +1,8 @@
 package org.apache.hadoop.tools;
 
 public class FedBalanceConfigs {
+  public static final String FEDERATION_BALANCE_CLASS =
+      "federation.balance.class";
   public static final String DISTCP_PROCEDURE_MAP_NUM =
       "distcp.procedure.map.num";
   public static final int DISTCP_PROCEDURE_MAP_NUM_DEFAULT = 10;
