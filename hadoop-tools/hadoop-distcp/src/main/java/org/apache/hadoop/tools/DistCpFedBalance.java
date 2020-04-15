@@ -89,12 +89,4 @@ public class DistCpFedBalance extends Configured implements Tool {
       return new URI("hdfs://" + ns + path);
     }
   }
-
-  public static void main(String[] argv) throws Exception {
-    Configuration conf = new HdfsConfiguration();
-    DistCpFedBalance balance = new DistCpFedBalance(conf);
-
-    int res = ToolRunner.run(balance, argv);
-    System.exit(res);
-  }
 }
