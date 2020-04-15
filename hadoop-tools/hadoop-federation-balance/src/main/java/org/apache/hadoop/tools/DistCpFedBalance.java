@@ -1,8 +1,6 @@
 package org.apache.hadoop.tools;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
-import org.apache.hadoop.hdfs.HdfsConfiguration;
 
 import org.apache.hadoop.hdfs.server.federation.SingleMountTableProcedure;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
@@ -13,7 +11,6 @@ import org.apache.hadoop.hdfs.server.namenode.procedure.Job;
 import org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureScheduler;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.util.Tool;
-import org.apache.hadoop.util.ToolRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
