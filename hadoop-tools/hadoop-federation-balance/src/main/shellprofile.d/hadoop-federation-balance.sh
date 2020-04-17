@@ -35,5 +35,3 @@ function hadoop_subcommand_fedbalance
 }
 
 fi
-
-fi
