@@ -25,8 +25,8 @@
   </parent>
   <artifactId>hadoop-federation-balance</artifactId>
   <version>3.3.0-SNAPSHOT</version>
-  <description>Apache Hadoop Distributed Copy</description>
-  <name>Apache Hadoop Distributed Copy</name>
+  <description>Apache Hadoop Federation Balance</description>
+  <name>Apache Hadoop Federation Balance</name>
   <packaging>jar</packaging>
 
   <properties>
@@ -213,7 +213,7 @@
         <configuration>
           <archive>
             <manifest>
-              <mainClass>org.apache.hadoop.tools.DistCp</mainClass>
+              <mainClass>org.apache.hadoop.tools.FedBalance</mainClass>
             </manifest>
           </archive>
         </configuration>
