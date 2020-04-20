@@ -121,6 +121,9 @@ public class Job<T extends Procedure> implements Writable {
         } catch (Exception e) {
           finish(e);// This job is failed.
           return;
+        } catch (Throwable t) {
+          finish(new IOException("Got throwable error.", t));
+          return;
         }
         if (scheduler.writeJournal(this)) {
           continue;
@@ -185,6 +188,12 @@ public class Job<T extends Procedure> implements Writable {
    */
   public boolean isJobDone() {
     return jobDone;
+  }
+
+  public synchronized void waitJobDone() throws InterruptedException {
+    while (!jobDone) {
+      wait();
+    }
   }
 
   /**
@@ -282,7 +291,7 @@ public class Job<T extends Procedure> implements Writable {
     if (firstProcedure == null) {
       return String.format("id=%s, firstProcedure=null", id);
     }
-    return String.format("id=%s, firstProcedure=", id,
+    return String.format("id=%s, firstProcedure=%s", id,
         firstProcedure.name() + "-" + firstProcedure.getClass());
   }
 

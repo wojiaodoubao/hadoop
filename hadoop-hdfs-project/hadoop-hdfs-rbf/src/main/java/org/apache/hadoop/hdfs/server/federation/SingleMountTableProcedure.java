@@ -6,10 +6,7 @@ import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
 import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
 import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
 import org.apache.hadoop.hdfs.server.federation.router.RouterClient;
-import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesRequest;
-import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesResponse;
-import org.apache.hadoop.hdfs.server.federation.store.protocol.UpdateMountTableEntryRequest;
-import org.apache.hadoop.hdfs.server.federation.store.protocol.UpdateMountTableEntryResponse;
+import org.apache.hadoop.hdfs.server.federation.store.protocol.*;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
 import org.apache.hadoop.hdfs.server.namenode.procedure.Procedure;
 import org.apache.hadoop.io.Text;
@@ -73,7 +70,7 @@ public class SingleMountTableProcedure extends Procedure {
 
     MountTable originalEntry = getMountEntry(fedPath, mountTable);
     if (originalEntry == null) {
-      throw new RuntimeException("Mount table " + fedPath + " doesn't exist");
+      throw new IOException("Mount table " + fedPath + " doesn't exist");
     } else {
       RemoteLocation remoteLocation =
           new RemoteLocation(dstNs, dstPath, fedPath);
@@ -83,8 +80,10 @@ public class SingleMountTableProcedure extends Procedure {
       UpdateMountTableEntryResponse response =
           mountTable.updateMountTableEntry(updateRequest);
       if (!response.getStatus()) {
-        throw new RuntimeException("Failed update mount table " + fedPath);
+        throw new IOException("Failed update mount table " + fedPath);
       }
+      rClient.getMountTableManager().refreshMountTableEntries(
+          RefreshMountTableEntriesRequest.newInstance());
     }
   }
 

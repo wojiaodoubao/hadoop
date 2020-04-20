@@ -2,6 +2,7 @@ package org.apache.hadoop.tools;
 
 import org.apache.hadoop.conf.Configured;
 
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.server.federation.SingleMountTableProcedure;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
 import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
@@ -37,8 +38,11 @@ public class DistCpFedBalance extends Configured implements Tool {
       System.out.println("usage: fedbalance [source_mount_point] [target_path]");
     }
     String fedPath = args[0];
-    URI src = getSrcPath(fedPath);
-    URI dst = new URI(args[1]);
+    Path src = getSrcPath(fedPath);
+    Path dst = new Path(args[1]);
+    if (dst.toUri().getAuthority() == null) {
+      throw new IOException("The destination cluster must be specified.");
+    }
     FedBalanceContext context = new FedBalanceContext(src, dst, getConf());
 
     ProcedureScheduler scheduler = new ProcedureScheduler(getConf());
@@ -48,7 +52,8 @@ public class DistCpFedBalance extends Configured implements Tool {
           new DistCpProcedure("distcp-procedure", null, 1000, context);
       SingleMountTableProcedure smtp =
           new SingleMountTableProcedure("single-mount-table-procedure", null,
-              1000, fedPath, dst.getPath(), dst.getAuthority(), getConf());
+              1000, fedPath, dst.toUri().getPath(), dst.toUri().getAuthority(),
+              getConf());
       TrashProcedure tp = new TrashProcedure("trash-procedure", null, 1000, context);
       Job balanceJob = new Job.Builder<>().nextProcedure(dcp)
           .nextProcedure(smtp).nextProcedure(tp).build();
@@ -64,7 +69,7 @@ public class DistCpFedBalance extends Configured implements Tool {
   /**
    * Get src uri from Router.
    */
-  private URI getSrcPath(String fedPath) throws IOException,
+  private Path getSrcPath(String fedPath) throws IOException,
       URISyntaxException {
     String address = getConf().getTrimmed(
         RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_KEY,
@@ -83,7 +88,7 @@ public class DistCpFedBalance extends Configured implements Tool {
     } else {
       String ns = entry.getDestinations().get(0).getNameserviceId();
       String path = entry.getDestinations().get(0).getDest();
-      return new URI("hdfs://" + ns + path);
+      return new Path("hdfs://" + ns + path);
     }
   }
 }

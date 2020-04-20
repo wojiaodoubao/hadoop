@@ -88,8 +88,7 @@ public class TestDistCpProcedure {
 
     Path src = new Path(testRoot, SRCDAT);
     Path dst = new Path(testRoot, DSTDAT);
-    FedBalanceContext context =
-        new FedBalanceContext(src.toUri(), dst.toUri(), conf);
+    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     ProcedureScheduler scheduler = new ProcedureScheduler(conf);
@@ -121,8 +120,7 @@ public class TestDistCpProcedure {
     // set permission.
     fs.setPermission(src, FsPermission.createImmutable((short) 020));
 
-    FedBalanceContext context =
-        new FedBalanceContext(src.toUri(), dst.toUri(), conf);
+    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
 
@@ -149,8 +147,7 @@ public class TestDistCpProcedure {
     Path src = new Path(testRoot, SRCDAT);
     Path dst = new Path(testRoot, DSTDAT);
 
-    FedBalanceContext context =
-        new FedBalanceContext(src.toUri(), dst.toUri(), conf);
+    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     executeProcedure(dcProcedure, Stage.DIFF_DISTCP,
@@ -191,8 +188,7 @@ public class TestDistCpProcedure {
     // open files.
     OutputStream out = fs.append(new Path(src, "a"));
 
-    FedBalanceContext context =
-        new FedBalanceContext(src.toUri(), dst.toUri(), conf);
+    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     executeProcedure(dcProcedure, Stage.DIFF_DISTCP,
@@ -222,8 +218,7 @@ public class TestDistCpProcedure {
     fs.createSnapshot(src, CURRENT_SNAPSHOT_NAME);
     fs.createSnapshot(dst, LAST_SNAPSHOT_NAME);
 
-    FedBalanceContext context =
-        new FedBalanceContext(src.toUri(), dst.toUri(), conf);
+    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     dcProcedure.finish();
@@ -242,8 +237,7 @@ public class TestDistCpProcedure {
 
     Path src = new Path(testRoot, SRCDAT);
     Path dst = new Path(testRoot, DSTDAT);
-    FedBalanceContext context =
-        new FedBalanceContext(src.toUri(), dst.toUri(), conf);
+    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
     final DistCpProcedure[] dcp = new DistCpProcedure[1];
     dcp[0] = new DistCpProcedure("distcp-procedure", null, 1000, context);
 
@@ -275,8 +269,7 @@ public class TestDistCpProcedure {
 
     Path src = new Path(testRoot, SRCDAT);
     Path dst = new Path(testRoot, DSTDAT);
-    FedBalanceContext context =
-        new FedBalanceContext(src.toUri(), dst.toUri(), conf);
+    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     ProcedureScheduler scheduler = new ProcedureScheduler(conf);

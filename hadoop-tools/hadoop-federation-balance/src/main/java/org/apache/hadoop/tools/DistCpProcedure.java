@@ -82,13 +82,14 @@ public class DistCpProcedure extends Procedure {
     this.forceCloseOpenFiles =
         conf.getBoolean(DISTCP_PROCEDURE_FORCE_CLOSE_OPEN_FILES, false);
     this.savePermission = true;
-    srcFs = (DistributedFileSystem) FileSystem.get(context.getSrcUri(), conf);
-    dstFs = (DistributedFileSystem) FileSystem.get(context.getDstUri(), conf);
+    srcFs = (DistributedFileSystem) context.getSrc().getFileSystem(conf);
+    dstFs = (DistributedFileSystem) context.getDst().getFileSystem(conf);
   }
 
   @Override
   public boolean execute(Procedure lastProcedure)
       throws RetryException, IOException {
+    LOG.info("Stage=" + stage.name());
     switch (stage) {
     case PRE_CHECK:
       preCheck();
@@ -112,13 +113,13 @@ public class DistCpProcedure extends Procedure {
   void preCheck() throws IOException {
     FileStatus status = srcFs.getFileStatus(context.getSrc());
     if (!status.isDirectory()) {
-      throw new RuntimeException(context.getSrc() + " doesn't exist.");
+      throw new IOException(context.getSrc() + " doesn't exist.");
     }
     if (dstFs.exists(context.getDst())) {
-      throw new RuntimeException(context.getDst() + " already exists.");
+      throw new IOException(context.getDst() + " already exists.");
     }
     if (srcFs.exists(new Path(context.getSrc(), ".snapshot"))) {
-      throw new RuntimeException(context.getSrc() + " shouldn't enable snapshot.");
+      throw new IOException(context.getSrc() + " shouldn't enable snapshot.");
     }
     stage = Stage.INIT_DISTCP;
   }
@@ -161,7 +162,7 @@ public class DistCpProcedure extends Procedure {
         if (job.isSuccessful()) {
           LOG.info("DistCp succeeded. jobId={}", job.getFailureInfo());
         } else {
-          throw new RuntimeException(
+          throw new IOException(
               "DistCp failed. jobId=" + job.getID() + "failure=" + job
                   .getFailureInfo());
         }
@@ -194,7 +195,7 @@ public class DistCpProcedure extends Procedure {
           FsPermission.createImmutable((short) 0));
       savePermission = false;
     }
-    closeAllOpenFiles(srcFs, context.getSrc().toString());
+    closeAllOpenFiles(srcFs, context.getSrc());
     // final distcp.
     RunningJob job = getCurrentJob();
     if (job != null) {
@@ -211,7 +212,7 @@ public class DistCpProcedure extends Procedure {
           stage = Stage.FINISH;
           return;
         } else {
-          throw new RuntimeException(
+          throw new IOException(
               "Final DistCp failed. Failure: " + job.getFailureInfo());
         }
       } else {
@@ -256,11 +257,12 @@ public class DistCpProcedure extends Procedure {
   /**
    * Close all open files. Block until all the files are closed.
    */
-  private void closeAllOpenFiles(DistributedFileSystem dfs, String path)
+  private void closeAllOpenFiles(DistributedFileSystem dfs, Path path)
       throws IOException {
+    String pathStr = path.toUri().getPath();
     while (true) {
       RemoteIterator<OpenFileEntry> iterator =
-          dfs.listOpenFiles(EnumSet.of(OpenFilesType.ALL_OPEN_FILES), path);
+          dfs.listOpenFiles(EnumSet.of(OpenFilesType.ALL_OPEN_FILES), pathStr);
       if (!iterator.hasNext()) { // all files has been closed.
         break;
       }
@@ -342,6 +344,7 @@ public class DistCpProcedure extends Procedure {
       distCp = new DistCp(config,
           OptionsParser.parse(command.toArray(new String[]{})));
       Job job = distCp.createAndSubmitJob();
+      LOG.info("Submit distcp job:" + job);
       return job.getJobID().toString();
     } catch (Exception e) {
       throw new IOException("Submit job failed.", e);
@@ -401,8 +404,8 @@ public class DistCpProcedure extends Procedure {
       acl = PBHelperClient.convert(proto);
     }
     savePermission = in.readBoolean();
-    srcFs = (DistributedFileSystem) FileSystem.get(context.getSrcUri(), conf);
-    dstFs = (DistributedFileSystem) FileSystem.get(context.getDstUri(), conf);
+    srcFs = (DistributedFileSystem) context.getSrc().getFileSystem(conf);
+    dstFs = (DistributedFileSystem) context.getDst().getFileSystem(conf);
     mapNum =
         conf.getInt(DISTCP_PROCEDURE_MAP_NUM, DISTCP_PROCEDURE_MAP_NUM_DEFAULT);
     bandWidth = conf.getInt(DISTCP_PROCEDURE_BAND_WIDTH_LIMIT,

@@ -93,7 +93,7 @@ public class HDFSJournal implements Journal {
     if (status == null) {
       fs.mkdirs(new Path(workUri.getPath()));
     } else if (!status.isDirectory()) {
-      throw new RuntimeException(workUri + " must be a directory.");
+      throw new IOException(workUri + " must be a directory.");
     }
     FileStatus[] statuses = fs.listStatus(new Path(workUri.getPath()));
     Job[] jobs = new Job[statuses.length];

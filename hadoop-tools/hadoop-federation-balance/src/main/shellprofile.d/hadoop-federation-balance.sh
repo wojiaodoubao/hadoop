@@ -31,6 +31,7 @@ function hadoop_subcommand_fedbalance
 {
   # shellcheck disable=SC2034
   HADOOP_CLASSNAME=org.apache.hadoop.tools.FedBalance
+  hadoop_add_to_classpath_tools hadoop-distcp
   hadoop_add_to_classpath_tools hadoop-federation-balance
 }
 

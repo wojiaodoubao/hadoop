@@ -108,6 +108,21 @@ public class ProcedureScheduler {
   }
 
   /**
+   * Remove the job from scheduler if it finishes.
+   */
+  public Job remove(Job job) {
+    Job inner = findJob(job);
+    if (inner == null) {
+      return null;
+    } else if (job.isJobDone()) {
+      synchronized (this) {
+        return jobSet.remove(inner);
+      }
+    }
+    return null;
+  }
+
+  /**
    * Find job in scheduler.
    *
    * @return the job in scheduler. Null if the schedule has no job with the
@@ -132,12 +147,10 @@ public class ProcedureScheduler {
     if (found == null || found.isJobDone()) {
       return;
     }
-    synchronized (found) {
-      while (!found.isJobDone()) {
-        try {
-          found.wait();
-        } catch (InterruptedException e) {
-        }
+    while (!found.isJobDone()) {
+      try {
+        found.waitJobDone();
+      } catch (InterruptedException e) {
       }
     }
   }
@@ -147,7 +160,7 @@ public class ProcedureScheduler {
    */
   void delay(Job job, long delayInMilliseconds) {
     delayQueue.add(new DelayWrapper(job, delayInMilliseconds));
-    LOG.info("Delay " + delayInMilliseconds + "ms " + job.getId());
+    LOG.info("Delay " + delayInMilliseconds + "ms job=" + job.getId());
   }
 
   boolean jobDone(Job job) {
@@ -287,13 +300,6 @@ public class ProcedureScheduler {
                 LOG.info("Job done. job=" + job.getId());
               } else {
                 LOG.warn("Job failed. job=" + job.getId(), job.error());
-              }
-            } else {
-              if (job.error() != null) {
-                LOG.info("Will retry or recover. job=" + job.getId(),
-                    job.error());
-              } else {
-                LOG.info("Will retry or recover. job=" + job.getId());
               }
             }
             return;
