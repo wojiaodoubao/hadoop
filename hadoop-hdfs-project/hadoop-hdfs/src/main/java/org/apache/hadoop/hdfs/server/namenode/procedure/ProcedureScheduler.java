@@ -22,6 +22,7 @@ import com.google.common.primitives.Ints;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.Collection;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -154,6 +155,13 @@ public class ProcedureScheduler {
       }
     }
     return found;
+  }
+
+  /**
+   * Return all jobs in the scheduler.
+   */
+  public Collection<Job> getAllJobs() {
+    return jobSet.values();
   }
 
   /**
@@ -307,7 +315,7 @@ public class ProcedureScheduler {
         try {
           final Job job = runningQueue.take();
           workersPool.submit(() -> {
-            LOG.info("Start job. job=", job);
+            LOG.info("Start job. job={}", job);
             job.execute();
             if (!running.get()) {
               return;

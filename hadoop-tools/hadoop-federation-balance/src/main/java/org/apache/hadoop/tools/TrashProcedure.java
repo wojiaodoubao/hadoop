@@ -35,6 +35,8 @@ public class TrashProcedure extends Procedure {
   private FedBalanceContext context;
   private Configuration conf;
 
+  public TrashProcedure() {}
+
   public TrashProcedure(String name, String nextProcedure, long delayDuration,
       FedBalanceContext context) throws IOException {
     super(name, nextProcedure, delayDuration);

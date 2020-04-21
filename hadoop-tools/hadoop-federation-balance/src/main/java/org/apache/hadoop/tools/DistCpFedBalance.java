@@ -36,6 +36,8 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Collection;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Move mount entry and data to a new sub-cluster using distcp.
@@ -44,6 +46,9 @@ public class DistCpFedBalance extends Configured implements Tool {
 
   public static final Logger LOG =
       LoggerFactory.getLogger(DistCpFedBalance.class);
+  private static final String USAGE = "usage: fedbalance:\n"
+            + "\t[submit <source_mount_point> <target_path>]\n"
+            + "\t[continue]";
 
   public DistCpFedBalance() {
     super();
@@ -51,34 +56,52 @@ public class DistCpFedBalance extends Configured implements Tool {
 
   @Override
   public int run(String[] args) throws Exception {
-    if (args.length < 2) {
-      System.out.println("usage: fedbalance [source_mount_point] [target_path]");
+    if (args == null || args.length < 1) {
+      System.out.println(USAGE);
     }
-    String fedPath = args[0];
-    Path src = getSrcPath(fedPath);
-    Path dst = new Path(args[1]);
-    if (dst.toUri().getAuthority() == null) {
-      throw new IOException("The destination cluster must be specified.");
-    }
-    FedBalanceContext context = new FedBalanceContext(src, dst, getConf());
+    int index = 0;
+    String command = args[index++];
+    if (command.equals("submit")) {
+      String fedPath = args[index++];
+      Path src = getSrcPath(fedPath);
+      Path dst = new Path(args[index++]);
+      if (dst.toUri().getAuthority() == null) {
+        throw new IOException("The destination cluster must be specified.");
+      }
+      FedBalanceContext context = new FedBalanceContext(src, dst, getConf());
 
-    ProcedureScheduler scheduler = new ProcedureScheduler(getConf());
-    scheduler.init();
-    try {
-      DistCpProcedure dcp =
-          new DistCpProcedure("distcp-procedure", null, 1000, context);
-      SingleMountTableProcedure smtp =
-          new SingleMountTableProcedure("single-mount-table-procedure", null,
-              1000, fedPath, dst.toUri().getPath(), dst.toUri().getAuthority(),
-              getConf());
-      TrashProcedure tp = new TrashProcedure("trash-procedure", null, 1000, context);
-      Job balanceJob = new Job.Builder<>().nextProcedure(dcp)
-          .nextProcedure(smtp).nextProcedure(tp).build();
-      scheduler.submit(balanceJob);
-      scheduler.waitUntilDone(balanceJob);
-    } catch (IOException e) {
-      LOG.error("Balance job failed.", e);
-      return -1;
+      ProcedureScheduler scheduler = new ProcedureScheduler(getConf());
+      scheduler.init();
+      try {
+        DistCpProcedure dcp =
+            new DistCpProcedure("distcp-procedure", null, 1000, context);
+        SingleMountTableProcedure smtp =
+            new SingleMountTableProcedure("single-mount-table-procedure", null,
+                1000, fedPath, dst.toUri().getPath(),
+                dst.toUri().getAuthority(), getConf());
+        TrashProcedure tp =
+            new TrashProcedure("trash-procedure", null, 1000, context);
+        Job balanceJob =
+            new Job.Builder<>().nextProcedure(dcp).nextProcedure(smtp)
+                .nextProcedure(tp).build();
+        scheduler.submit(balanceJob);
+        scheduler.waitUntilDone(balanceJob);
+      } catch (IOException e) {
+        LOG.error("Balance job failed.", e);
+        return -1;
+      }
+    } else if (command.equals("continue")) {
+      ProcedureScheduler scheduler = new ProcedureScheduler(getConf());
+      scheduler.init();
+      while (true) {
+        Collection<Job> jobs = scheduler.getAllJobs();
+        for (Job job : jobs) {
+          System.out.println(job);
+        }
+        Thread.sleep(TimeUnit.MINUTES.toMillis(10));
+      }
+    } else {
+      System.out.println(USAGE);
     }
     return 0;
   }

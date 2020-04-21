@@ -306,7 +306,7 @@ public class TestProcedureScheduler {
   /**
    * Test the job will be recovered if writing journal fails.
    */
-  @Test(timeout = 10000)
+  @Test(timeout = 30000)
   public void testJobRecoveryWhenWriteJournalFail() throws Exception {
     ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
     scheduler.init();

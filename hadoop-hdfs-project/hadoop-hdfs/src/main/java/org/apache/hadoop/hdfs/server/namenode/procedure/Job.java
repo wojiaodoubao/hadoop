@@ -305,11 +305,16 @@ public class Job<T extends Procedure> implements Writable {
 
   @Override
   public String toString() {
-    if (firstProcedure == null) {
-      return String.format("id=%s, firstProcedure=null", id);
+    StringBuilder builder = new StringBuilder();
+    builder.append("id=" + id);
+    if (firstProcedure != null) {
+      builder.append(" firstProcedure=" + firstProcedure.name());
     }
-    return String.format("id=%s, firstProcedure=%s", id,
-        firstProcedure.name() + "-" + firstProcedure.getClass());
+    builder.append(" jobDone=" + jobDone);
+    if (error != null) {
+      builder.append(" error=" + error.getMessage());
+    }
+    return builder.toString();
   }
 
   boolean isSchedulerShutdown() {
