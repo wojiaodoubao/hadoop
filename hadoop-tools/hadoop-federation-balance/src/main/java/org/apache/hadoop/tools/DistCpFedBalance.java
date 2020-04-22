@@ -40,7 +40,11 @@ import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Move mount entry and data to a new sub-cluster using distcp.
+ * Balance data from src cluster to dst cluster with distcp.
+ *
+ * 1. Move data from the source path to the destination path with distcp.
+ * 2. Update the the mount entry.
+ * 3. Delete the source path to trash.
  */
 public class DistCpFedBalance extends Configured implements Tool {
 

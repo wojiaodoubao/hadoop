@@ -37,7 +37,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Update the mount table:
+ * Update mount table:
  * Old mount table:
  *   /a/b/c -> {ns:src path:/a/b/c}
  * New mount table:

@@ -25,6 +25,9 @@ import org.apache.hadoop.util.ToolRunner;
 
 import static org.apache.hadoop.tools.FedBalanceConfigs.FEDERATION_BALANCE_CLASS;
 
+/**
+ * Balance data across federation sub-clusters.
+ */
 public class FedBalance {
   public static void main(String args[]) throws Exception {
     Configuration conf = new HdfsConfiguration();
