@@ -15,37 +15,44 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.namenode.procedure;
+package org.apache.hadoop.hdfs.procedure;
+
+import org.apache.hadoop.util.Time;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class MultiPhaseProcedure extends Procedure {
+/**
+ * This procedure waits specified period of time then finish. It simulates the
+ * behaviour of blocking procedures.
+ */
+public class WaitProcedure extends BalanceProcedure {
 
-  private int totalPhase;
-  private int currentPhase = 0;
-  static int counter = 0;
+  long waitTime;
 
-  public MultiPhaseProcedure() {}
+  public WaitProcedure() {
+  }
 
-  public MultiPhaseProcedure(String name, long delay, int totalPhase) {
+  public WaitProcedure(String name, long delay, long waitTime) {
     super(name, delay);
-    this.totalPhase = totalPhase;
+    this.waitTime = waitTime;
   }
 
   @Override
-  public boolean execute(Procedure lastProcedure)
-      throws RetryException, IOException {
-    if (currentPhase < totalPhase) {
-      LOG.info("phase " + currentPhase);
-      currentPhase++;
-      counter++;
+  public boolean execute(BalanceProcedure lastProcedure) throws IOException {
+    long startTime = Time.now();
+    long timeLeft = waitTime;
+    while (timeLeft > 0) {
       try {
-        Thread.sleep(100);
+        Thread.sleep(timeLeft);
       } catch (InterruptedException e) {
+        if (isSchedulerShutdown()) {
+          return false;
+        }
+      } finally {
+        timeLeft = waitTime - (Time.now() - startTime);
       }
-      return false;
     }
     return true;
   }
@@ -53,22 +60,12 @@ public class MultiPhaseProcedure extends Procedure {
   @Override
   public void write(DataOutput out) throws IOException {
     super.write(out);
-    out.writeInt(totalPhase);
-    out.writeInt(currentPhase);
+    out.writeLong(waitTime);
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
     super.readFields(in);
-    totalPhase = in.readInt();
-    currentPhase = in.readInt();
-  }
-
-  public static int getCounter() {
-    return counter;
-  }
-
-  public static void setCounter(int counter) {
-    MultiPhaseProcedure.counter = counter;
+    waitTime = in.readLong();
   }
 }

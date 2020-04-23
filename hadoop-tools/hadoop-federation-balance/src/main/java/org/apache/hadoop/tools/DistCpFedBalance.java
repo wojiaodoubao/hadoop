@@ -20,13 +20,13 @@ package org.apache.hadoop.tools;
 import org.apache.hadoop.conf.Configured;
 
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.server.federation.SingleMountTableProcedure;
+import org.apache.hadoop.hdfs.server.federation.MountTableProcedure;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
 import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
 import org.apache.hadoop.hdfs.server.federation.router.RouterClient;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
-import org.apache.hadoop.hdfs.server.namenode.procedure.Job;
-import org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureScheduler;
+import org.apache.hadoop.hdfs.procedure.BalanceJob;
+import org.apache.hadoop.hdfs.procedure.BalanceProcedureScheduler;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.util.Tool;
 import org.slf4j.Logger;
@@ -34,7 +34,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.concurrent.TimeUnit;
@@ -74,19 +73,19 @@ public class DistCpFedBalance extends Configured implements Tool {
       }
       FedBalanceContext context = new FedBalanceContext(src, dst, getConf());
 
-      ProcedureScheduler scheduler = new ProcedureScheduler(getConf());
+      BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(getConf());
       scheduler.init();
       try {
         DistCpProcedure dcp =
             new DistCpProcedure("distcp-procedure", null, 1000, context);
-        SingleMountTableProcedure smtp =
-            new SingleMountTableProcedure("single-mount-table-procedure", null,
+        MountTableProcedure smtp =
+            new MountTableProcedure("single-mount-table-procedure", null,
                 1000, fedPath, dst.toUri().getPath(),
                 dst.toUri().getAuthority(), getConf());
         TrashProcedure tp =
             new TrashProcedure("trash-procedure", null, 1000, context);
-        Job balanceJob =
-            new Job.Builder<>().nextProcedure(dcp).nextProcedure(smtp)
+        BalanceJob balanceJob =
+            new BalanceJob.Builder<>().nextProcedure(dcp).nextProcedure(smtp)
                 .nextProcedure(tp).build();
         scheduler.submit(balanceJob);
         scheduler.waitUntilDone(balanceJob);
@@ -95,11 +94,11 @@ public class DistCpFedBalance extends Configured implements Tool {
         return -1;
       }
     } else if (command.equals("continue")) {
-      ProcedureScheduler scheduler = new ProcedureScheduler(getConf());
+      BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(getConf());
       scheduler.init();
       while (true) {
-        Collection<Job> jobs = scheduler.getAllJobs();
-        for (Job job : jobs) {
+        Collection<BalanceJob> jobs = scheduler.getAllJobs();
+        for (BalanceJob job : jobs) {
           System.out.println(job);
         }
         Thread.sleep(TimeUnit.MINUTES.toMillis(10));
@@ -122,7 +121,7 @@ public class DistCpFedBalance extends Configured implements Tool {
     RouterClient rClient = new RouterClient(routerSocket, getConf());
     MountTableManager mountTable = rClient.getMountTableManager();
     MountTable entry =
-        SingleMountTableProcedure.getMountEntry(fedPath, mountTable);
+        MountTableProcedure.getMountEntry(fedPath, mountTable);
     if (entry == null) {
       throw new IllegalArgumentException(
           "The mount point doesn't exist. path=" + fedPath);

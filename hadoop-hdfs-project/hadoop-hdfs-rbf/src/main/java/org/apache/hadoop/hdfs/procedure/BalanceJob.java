@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.namenode.procedure;
+package org.apache.hadoop.hdfs.procedure;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.io.Text;
@@ -37,12 +37,12 @@ import java.util.ArrayList;
 /**
  * A Job is a state machine consists of many procedures.
  */
-public class Job<T extends Procedure> implements Writable {
+public class BalanceJob<T extends BalanceProcedure> implements Writable {
   private String id;
-  private ProcedureScheduler scheduler;
+  private BalanceProcedureScheduler scheduler;
   private volatile boolean jobDone = false;
   private Exception error;
-  public static final Logger LOG = LoggerFactory.getLogger(Job.class.getName());
+  public static final Logger LOG = LoggerFactory.getLogger(BalanceJob.class.getName());
   private Map<String, T> procedureTable = new HashMap<>();
   private T firstProcedure;
   private T curProcedure;
@@ -56,7 +56,7 @@ public class Job<T extends Procedure> implements Writable {
     RESERVED_NAME.add(NEXT_PROCEDURE_NONE);
   }
 
-  public static class Builder<T extends Procedure> {
+  public static class Builder<T extends BalanceProcedure> {
 
     List<T> procedures = new ArrayList<>();
     boolean removeAfterDone = false;
@@ -85,18 +85,18 @@ public class Job<T extends Procedure> implements Writable {
       return this;
     }
 
-    public Job build() throws IOException {
-      Job job = new Job(procedures, removeAfterDone);
-      for (Procedure<T> p : procedures) {
+    public BalanceJob build() throws IOException {
+      BalanceJob job = new BalanceJob(procedures, removeAfterDone);
+      for (BalanceProcedure<T> p : procedures) {
         p.setJob(job);
       }
       return job;
     }
   }
 
-  private Job() {}
+  private BalanceJob() {}
 
-  private Job(Iterable<T> procedures, boolean remove) throws IOException {
+  private BalanceJob(Iterable<T> procedures, boolean remove) throws IOException {
     for (T p : procedures) {
       String taskName = p.name();
       for (String rname : RESERVED_NAME) {
@@ -132,7 +132,7 @@ public class Job<T extends Procedure> implements Writable {
             lastProcedure = curProcedure;
             curProcedure = next();
           }
-        } catch (Procedure.RetryException tre) {
+        } catch (BalanceProcedure.RetryException tre) {
           scheduler.delay(this, curProcedure.delayMillisBeforeRetry());
           return;
         } catch (Exception e) {
@@ -168,7 +168,7 @@ public class Job<T extends Procedure> implements Writable {
     }
   }
 
-  void setScheduler(ProcedureScheduler scheduler) {
+  void setScheduler(BalanceProcedureScheduler scheduler) {
     this.scheduler = scheduler;
   }
 
@@ -285,8 +285,8 @@ public class Job<T extends Procedure> implements Writable {
 
   @Override
   public boolean equals(Object obj) {
-    if (obj instanceof Job) {
-      Job ojob = (Job) obj;
+    if (obj instanceof BalanceJob) {
+      BalanceJob ojob = (BalanceJob) obj;
       if (!id.equals(ojob.id)) {
         return false;
       }

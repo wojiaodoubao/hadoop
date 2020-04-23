@@ -15,38 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.namenode.procedure;
+package org.apache.hadoop.hdfs.procedure;
 
-import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * UnrecoverableProcedure will lose the handler if it's recovered.
+ * This procedure records all the finished procedures.
  */
-public class UnrecoverableProcedure extends Procedure {
+public class RecordProcedure extends BalanceProcedure<RecordProcedure> {
 
-  public interface Call {
-    boolean execute(Procedure lastProcedure) throws RetryException, IOException;
-  }
+  static List<RecordProcedure> finish = new ArrayList<>();
 
-  private Call handler;
+  public RecordProcedure() {}
 
-  public UnrecoverableProcedure() {}
-
-  /**
-   * The handler will be lost if the procedure is recovered.
-   */
-  public UnrecoverableProcedure(String name, long delay, Call handler) {
+  public RecordProcedure(String name, long delay) {
     super(name, delay);
-    this.handler = handler;
   }
 
   @Override
-  public boolean execute(Procedure lastProcedure) throws RetryException,
-      IOException {
-    if (handler != null) {
-      return handler.execute(lastProcedure);
-    } else {
-      return true;
-    }
+  public boolean execute(RecordProcedure lastProcedure) throws RetryException {
+    finish.add(this);
+    return true;
   }
 }

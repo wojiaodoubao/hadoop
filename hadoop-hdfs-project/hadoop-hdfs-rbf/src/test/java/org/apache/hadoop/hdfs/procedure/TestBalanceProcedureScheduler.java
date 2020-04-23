@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.namenode.procedure;
+package org.apache.hadoop.hdfs.procedure;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
@@ -38,14 +38,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.SCHEDULER_BASE_URI;
-import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.WORK_THREAD_NUM;
+import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.SCHEDULER_BASE_URI;
+import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.WORK_THREAD_NUM;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotSame;
 
-public class TestProcedureScheduler {
+public class TestBalanceProcedureScheduler {
 
   private static MiniDFSCluster cluster;
   private static final Configuration CONF = new Configuration();
@@ -77,18 +77,18 @@ public class TestProcedureScheduler {
    */
   @Test(timeout = 30000)
   public void testShutdownScheduler() throws Exception {
-    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init();
     // construct job
-    Job.Builder builder = new Job.Builder<>();
+    BalanceJob.Builder builder = new BalanceJob.Builder<>();
     builder.nextProcedure(new WaitProcedure("wait", 1000, 30 * 1000));
-    Job job = builder.build();
+    BalanceJob job = builder.build();
 
     scheduler.submit(job);
     Thread.sleep(1000);// wait job to be scheduled.
     scheduler.shutDownAndWait(30 * 1000);
 
-    Journal journal = ReflectionUtils.newInstance(HDFSJournal.class, CONF);
+    BalanceJournal journal = ReflectionUtils.newInstance(HDFSJournal.class, CONF);
     journal.clear(job);
   }
 
@@ -97,18 +97,18 @@ public class TestProcedureScheduler {
    */
   @Test(timeout = 30000)
   public void testSuccessfulJob() throws Exception {
-    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init();
     try {
       // construct job
       List<RecordProcedure> procedures = new ArrayList<>();
-      Job.Builder builder = new Job.Builder<RecordProcedure>();
+      BalanceJob.Builder builder = new BalanceJob.Builder<RecordProcedure>();
       for (int i = 0; i < 5; i++) {
         RecordProcedure r = new RecordProcedure("record-" + i, 1000L);
         builder.nextProcedure(r);
         procedures.add(r);
       }
-      Job<RecordProcedure> job = builder.build();
+      BalanceJob<RecordProcedure> job = builder.build();
 
       scheduler.submit(job);
       scheduler.waitUntilDone(job);
@@ -128,15 +128,15 @@ public class TestProcedureScheduler {
    */
   @Test
   public void testFailedJob() throws Exception {
-    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init();
     try {
-      Job.Builder builder = new Job.Builder<>();
+      BalanceJob.Builder builder = new BalanceJob.Builder<>();
       builder.nextProcedure(
           new UnrecoverableProcedure("fail", 1000, lastProcedure -> {
             throw new IOException("Job failed exception.");
           }));
-      Job job = builder.build();
+      BalanceJob job = builder.build();
       scheduler.submit(job);
       scheduler.waitUntilDone(job);
       GenericTestUtils
@@ -151,23 +151,23 @@ public class TestProcedureScheduler {
    */
   @Test
   public void testGetJobAfterRecover() throws Exception {
-    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init();
     try {
       // construct job
-      Job.Builder builder = new Job.Builder<>();
+      BalanceJob.Builder builder = new BalanceJob.Builder<>();
       builder.addProcedure(new WaitProcedure("wait", 1000, 1000))
           .removeAfterDone(false);
-      Job job = builder.build();
+      BalanceJob job = builder.build();
       scheduler.submit(job);
       scheduler.shutDownAndWait(2);
 
       // restart scheduler and recover the job.
-      scheduler = new ProcedureScheduler(CONF);
+      scheduler = new BalanceProcedureScheduler(CONF);
       scheduler.init();
       scheduler.waitUntilDone(job);
 
-      Job recoverJob = scheduler.findJob(job);
+      BalanceJob recoverJob = scheduler.findJob(job);
       assertNull(recoverJob.error());
       assertNotSame(job, recoverJob);
       assertEquals(job, recoverJob);
@@ -181,14 +181,14 @@ public class TestProcedureScheduler {
    */
   @Test(timeout = 5000)
   public void testRetry() throws Exception {
-    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init();
     try {
       // construct job
-      Job.Builder builder = new Job.Builder<>();
+      BalanceJob.Builder builder = new BalanceJob.Builder<>();
       RetryProcedure retryProcedure = new RetryProcedure("retry", 1000, 3);
       builder.nextProcedure(retryProcedure);
-      Job job = builder.build();
+      BalanceJob job = builder.build();
 
       long start = Time.now();
       scheduler.submit(job);
@@ -208,10 +208,10 @@ public class TestProcedureScheduler {
    */
   @Test(timeout = 5000)
   public void testEmptyJob() throws Exception {
-    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init();
     try {
-      Job job = new Job.Builder<>().build();
+      BalanceJob job = new BalanceJob.Builder<>().build();
       scheduler.submit(job);
       scheduler.waitUntilDone(job);
     } finally {
@@ -224,21 +224,21 @@ public class TestProcedureScheduler {
    */
   @Test(timeout = 5000)
   public void testJobSerializeAndDeserialize() throws Exception {
-    Job.Builder builder = new Job.Builder<RecordProcedure>();
+    BalanceJob.Builder builder = new BalanceJob.Builder<RecordProcedure>();
     for (int i = 0; i < 5; i++) {
       RecordProcedure r = new RecordProcedure("record-" + i, 1000L);
       builder.nextProcedure(r);
     }
     builder.nextProcedure(new RetryProcedure("retry", 1000, 3));
-    Job<RecordProcedure> job = builder.build();
-    job.setId(ProcedureScheduler.allocateJobId());
+    BalanceJob<RecordProcedure> job = builder.build();
+    job.setId(BalanceProcedureScheduler.allocateJobId());
     // Serialize.
     ByteArrayOutputStream bao = new ByteArrayOutputStream();
     job.write(new DataOutputStream(bao));
     bao.flush();
     ByteArrayInputStream bai = new ByteArrayInputStream(bao.toByteArray());
     // Deserialize.
-    Job newJob = new Job.Builder<>().build();
+    BalanceJob newJob = new BalanceJob.Builder<>().build();
     newJob.readFields(new DataInputStream(bai));
     assertEquals(job, newJob);
   }
@@ -248,15 +248,15 @@ public class TestProcedureScheduler {
    */
   @Test(timeout = 5000)
   public void testSchedulerDownAndRecoverJob() throws Exception {
-    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init();
 
     try {
       // construct job
-      Job.Builder builder = new Job.Builder<>();
+      BalanceJob.Builder builder = new BalanceJob.Builder<>();
       MultiPhaseProcedure multiPhaseProcedure = new MultiPhaseProcedure("retry", 1000, 10);
       builder.addProcedure(multiPhaseProcedure);
-      Job job = builder.build();
+      BalanceJob job = builder.build();
 
       scheduler.submit(job);
       Thread.sleep(500);// wait procedure to be scheduled.
@@ -267,7 +267,7 @@ public class TestProcedureScheduler {
       assertTrue(before > 0 && before < 10);
 
       // restart scheduler, test recovering the job.
-      scheduler = new ProcedureScheduler(CONF);
+      scheduler = new BalanceProcedureScheduler(CONF);
       scheduler.init();
       scheduler.waitUntilDone(job);
       int after = MultiPhaseProcedure.getCounter();
@@ -279,20 +279,20 @@ public class TestProcedureScheduler {
 
   @Test(timeout = 5000)
   public void testRecoverJobFromJournal() throws Exception {
-    Journal journal = ReflectionUtils.newInstance(HDFSJournal.class, CONF);
-    Job.Builder builder = new Job.Builder<RecordProcedure>();
-    Procedure wait0 = new WaitProcedure("wait0", 1000, 5000);
-    Procedure wait1 = new WaitProcedure("wait1", 1000, 1000);
+    BalanceJournal journal = ReflectionUtils.newInstance(HDFSJournal.class, CONF);
+    BalanceJob.Builder builder = new BalanceJob.Builder<RecordProcedure>();
+    BalanceProcedure wait0 = new WaitProcedure("wait0", 1000, 5000);
+    BalanceProcedure wait1 = new WaitProcedure("wait1", 1000, 1000);
     builder.nextProcedure(wait0).nextProcedure(wait1);
 
-    Job job = builder.build();
-    job.setId(ProcedureScheduler.allocateJobId());
+    BalanceJob job = builder.build();
+    job.setId(BalanceProcedureScheduler.allocateJobId());
     job.setCurrentProcedure(wait1);
     job.setLastProcedure(null);
     journal.saveJob(job);
 
     long start = Time.now();
-    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init();
     try {
       scheduler.waitUntilDone(job);
@@ -308,13 +308,13 @@ public class TestProcedureScheduler {
    */
   @Test(timeout = 30000)
   public void testJobRecoveryWhenWriteJournalFail() throws Exception {
-    ProcedureScheduler scheduler = new ProcedureScheduler(CONF);
+    BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init();
 
     try {
       // construct job
       AtomicBoolean recoverFlag = new AtomicBoolean(true);
-      Job.Builder builder = new Job.Builder<>();
+      BalanceJob.Builder builder = new BalanceJob.Builder<>();
       builder.nextProcedure(new WaitProcedure("wait", 1000, 1000))
           .nextProcedure(
               new UnrecoverableProcedure("shutdown", 1000, lastProcedure -> {
@@ -326,7 +326,7 @@ public class TestProcedureScheduler {
             return true;
           })).nextProcedure(new WaitProcedure("wait", 1000, 1000));
 
-      Job job = builder.build();
+      BalanceJob job = builder.build();
       scheduler.submit(job);
       scheduler.waitUntilDone(job);
       assertTrue(job.isJobDone());

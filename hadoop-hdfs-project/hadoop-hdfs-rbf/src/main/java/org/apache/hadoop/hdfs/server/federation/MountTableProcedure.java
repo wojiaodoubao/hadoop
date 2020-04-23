@@ -25,7 +25,7 @@ import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
 import org.apache.hadoop.hdfs.server.federation.router.RouterClient;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.*;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
-import org.apache.hadoop.hdfs.server.namenode.procedure.Procedure;
+import org.apache.hadoop.hdfs.procedure.BalanceProcedure;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.net.NetUtils;
 
@@ -43,7 +43,7 @@ import java.util.List;
  * New mount table:
  *   /a/b/c -> {ns:dst path:/a/b/c}
  */
-public class SingleMountTableProcedure extends Procedure {
+public class MountTableProcedure extends BalanceProcedure {
 
   private String fedPath;
   private String dstPath;
@@ -51,7 +51,7 @@ public class SingleMountTableProcedure extends Procedure {
   private Configuration conf;
   private RouterClient rClient;
 
-  public SingleMountTableProcedure() {}
+  public MountTableProcedure() {}
 
   /**
    * Update mount entry fedPath to specified dst uri.
@@ -60,7 +60,7 @@ public class SingleMountTableProcedure extends Procedure {
    * @param dstPath the sub-cluster uri of the dst path.
    * @param conf the configuration.
    */
-  public SingleMountTableProcedure(String name, String nextProcedure,
+  public MountTableProcedure(String name, String nextProcedure,
       long delayDuration, String fedPath, String dstPath, String dstNs,
       Configuration conf) {
     super(name, nextProcedure, delayDuration);
@@ -71,7 +71,7 @@ public class SingleMountTableProcedure extends Procedure {
   }
 
   @Override
-  public boolean execute(Procedure lastProcedure)
+  public boolean execute(BalanceProcedure lastProcedure)
       throws RetryException, IOException {
     updateMountTable();
     return true;

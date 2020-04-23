@@ -15,44 +15,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.namenode.procedure;
-
-import org.apache.hadoop.util.Time;
+package org.apache.hadoop.hdfs.procedure;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-/**
- * This procedure waits specified period of time then finish. It simulates the
- * behaviour of blocking procedures.
- */
-public class WaitProcedure extends Procedure {
+public class MultiPhaseProcedure extends BalanceProcedure {
 
-  long waitTime;
+  private int totalPhase;
+  private int currentPhase = 0;
+  static int counter = 0;
 
-  public WaitProcedure() {
-  }
+  public MultiPhaseProcedure() {}
 
-  public WaitProcedure(String name, long delay, long waitTime) {
+  public MultiPhaseProcedure(String name, long delay, int totalPhase) {
     super(name, delay);
-    this.waitTime = waitTime;
+    this.totalPhase = totalPhase;
   }
 
   @Override
-  public boolean execute(Procedure lastProcedure) throws IOException {
-    long startTime = Time.now();
-    long timeLeft = waitTime;
-    while (timeLeft > 0) {
+  public boolean execute(BalanceProcedure lastProcedure)
+      throws RetryException, IOException {
+    if (currentPhase < totalPhase) {
+      LOG.info("phase " + currentPhase);
+      currentPhase++;
+      counter++;
       try {
-        Thread.sleep(timeLeft);
+        Thread.sleep(100);
       } catch (InterruptedException e) {
-        if (isSchedulerShutdown()) {
-          return false;
-        }
-      } finally {
-        timeLeft = waitTime - (Time.now() - startTime);
       }
+      return false;
     }
     return true;
   }
@@ -60,12 +53,22 @@ public class WaitProcedure extends Procedure {
   @Override
   public void write(DataOutput out) throws IOException {
     super.write(out);
-    out.writeLong(waitTime);
+    out.writeInt(totalPhase);
+    out.writeInt(currentPhase);
   }
 
   @Override
   public void readFields(DataInput in) throws IOException {
     super.readFields(in);
-    waitTime = in.readLong();
+    totalPhase = in.readInt();
+    currentPhase = in.readInt();
+  }
+
+  public static int getCounter() {
+    return counter;
+  }
+
+  public static void setCounter(int counter) {
+    MultiPhaseProcedure.counter = counter;
   }
 }

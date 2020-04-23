@@ -15,13 +15,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.namenode.procedure;
+package org.apache.hadoop.hdfs.procedure;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class RetryProcedure extends Procedure {
+public class RetryProcedure extends BalanceProcedure {
 
   private int retryTime = 1;
   private int totalRetry = 0;
@@ -34,7 +34,7 @@ public class RetryProcedure extends Procedure {
   }
 
   @Override
-  public boolean execute(Procedure lastProcedure) throws RetryException {
+  public boolean execute(BalanceProcedure lastProcedure) throws RetryException {
     if (retryTime > 0) {
       retryTime--;
       totalRetry++;

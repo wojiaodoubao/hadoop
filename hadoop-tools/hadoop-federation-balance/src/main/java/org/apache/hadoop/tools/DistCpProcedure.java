@@ -28,7 +28,7 @@ import org.apache.hadoop.hdfs.protocol.OpenFilesIterator.OpenFilesType;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.hdfs.protocol.proto.AclProtos;
 import org.apache.hadoop.hdfs.protocolPB.PBHelperClient;
-import org.apache.hadoop.hdfs.server.namenode.procedure.Procedure;
+import org.apache.hadoop.hdfs.procedure.BalanceProcedure;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobID;
@@ -59,7 +59,7 @@ import static org.apache.hadoop.tools.FedBalanceConfigs.*;
  * FINAL_DISTCP(optional)  :close all open files and do the final round distcp.
  * FINISH                  :procedure finish.
  */
-public class DistCpProcedure extends Procedure {
+public class DistCpProcedure extends BalanceProcedure {
 
   public static final Logger LOG =
       LoggerFactory.getLogger(DistCpProcedure.class);
@@ -104,7 +104,7 @@ public class DistCpProcedure extends Procedure {
   }
 
   @Override
-  public boolean execute(Procedure lastProcedure)
+  public boolean execute(BalanceProcedure lastProcedure)
       throws RetryException, IOException {
     LOG.info("Stage=" + stage.name());
     switch (stage) {

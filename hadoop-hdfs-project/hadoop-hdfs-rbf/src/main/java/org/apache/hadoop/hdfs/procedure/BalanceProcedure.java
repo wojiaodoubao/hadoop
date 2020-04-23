@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.namenode.procedure;
+package org.apache.hadoop.hdfs.procedure;
 
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
@@ -27,31 +27,31 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-import static org.apache.hadoop.hdfs.server.namenode.procedure.Job.NEXT_PROCEDURE_NONE;
+import static org.apache.hadoop.hdfs.procedure.BalanceJob.NEXT_PROCEDURE_NONE;
 
 /**
  * The components of the Job. It implements the custom logic.
  */
-public abstract class Procedure<T extends Procedure> implements Writable {
+public abstract class BalanceProcedure<T extends BalanceProcedure> implements Writable {
 
   public static final Logger LOG =
-      LoggerFactory.getLogger(Procedure.class.getName());
+      LoggerFactory.getLogger(BalanceProcedure.class.getName());
   private String nextProcedure;
   private String name;
   private long delayDuration;
-  private Job job;
+  private BalanceJob job;
 
-  public Procedure() {
+  public BalanceProcedure() {
   }
 
-  public Procedure(String name, String nextProcedure, long delayDuration) {
+  public BalanceProcedure(String name, String nextProcedure, long delayDuration) {
     this();
     this.name = name;
     this.nextProcedure = nextProcedure;
     this.delayDuration = delayDuration;
   }
 
-  public Procedure(String name, long delayDuration) {
+  public BalanceProcedure(String name, long delayDuration) {
     this(name, NEXT_PROCEDURE_NONE, delayDuration);
   }
 
@@ -87,7 +87,7 @@ public abstract class Procedure<T extends Procedure> implements Writable {
     this.nextProcedure = nextProcedure;
   }
 
-  void setJob(Job job) {
+  void setJob(BalanceJob job) {
     this.job = job;
   }
 
@@ -125,8 +125,8 @@ public abstract class Procedure<T extends Procedure> implements Writable {
 
   @Override
   public boolean equals(Object obj) {
-    if (obj instanceof Procedure) {
-      Procedure p = (Procedure) obj;
+    if (obj instanceof BalanceProcedure) {
+      BalanceProcedure p = (BalanceProcedure) obj;
       return isEquals(nextProcedure, p.nextProcedure) && isEquals(name, p.name)
           && delayDuration == p.delayDuration;
     }

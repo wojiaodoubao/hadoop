@@ -15,34 +15,38 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.namenode.procedure;
-
-import org.apache.hadoop.conf.Configurable;
+package org.apache.hadoop.hdfs.procedure;
 
 import java.io.IOException;
 
 /**
- * The Journal of the state machine. It handles the job persistence and recover.
+ * UnrecoverableProcedure will lose the handler if it's recovered.
  */
-public interface Journal extends Configurable {
+public class UnrecoverableProcedure extends BalanceProcedure {
+
+  public interface Call {
+    boolean execute(BalanceProcedure lastProcedure) throws RetryException, IOException;
+  }
+
+  private Call handler;
+
+  public UnrecoverableProcedure() {}
 
   /**
-   * Save journal of this job.
+   * The handler will be lost if the procedure is recovered.
    */
-  void saveJob(Job job) throws IOException;
+  public UnrecoverableProcedure(String name, long delay, Call handler) {
+    super(name, delay);
+    this.handler = handler;
+  }
 
-  /**
-   * Recover the job from journal.
-   */
-  void recoverJob(Job job) throws IOException;
-
-  /**
-   * List all unfinished jobs.
-   */
-  Job[] listAllJobs() throws IOException;
-
-  /**
-   * Clear all the journals of this job.
-   */
-  void clear(Job job) throws IOException;
+  @Override
+  public boolean execute(BalanceProcedure lastProcedure) throws RetryException,
+      IOException {
+    if (handler != null) {
+      return handler.execute(lastProcedure);
+    } else {
+      return true;
+    }
+  }
 }

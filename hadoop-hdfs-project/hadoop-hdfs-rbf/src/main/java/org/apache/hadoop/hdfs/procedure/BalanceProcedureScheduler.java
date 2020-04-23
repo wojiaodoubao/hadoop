@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.namenode.procedure;
+package org.apache.hadoop.hdfs.procedure;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
@@ -39,9 +39,9 @@ import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.WORK_THREAD_NUM;
-import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.WORK_THREAD_NUM_DEFAULT;
-import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.JOURNAL_CLASS;
+import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.WORK_THREAD_NUM;
+import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.WORK_THREAD_NUM_DEFAULT;
+import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.JOURNAL_CLASS;
 /**
  * The state machine framework consist of:
  *   Job:                The state machine. It implements the basic logic of the
@@ -62,15 +62,15 @@ import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKe
  *   scheduler.submit(job);
  *   scheduler.waitUntilDone(job);
  */
-public class ProcedureScheduler {
+public class BalanceProcedureScheduler {
   public static final Logger LOG =
-      LoggerFactory.getLogger(ProcedureScheduler.class);
-  private ConcurrentHashMap<Job, Job> jobSet;
-  private LinkedBlockingQueue<Job> runningQueue;
+      LoggerFactory.getLogger(BalanceProcedureScheduler.class);
+  private ConcurrentHashMap<BalanceJob, BalanceJob> jobSet;
+  private LinkedBlockingQueue<BalanceJob> runningQueue;
   private DelayQueue<DelayWrapper> delayQueue;
-  private LinkedBlockingQueue<Job> recoverQueue;
+  private LinkedBlockingQueue<BalanceJob> recoverQueue;
   private Configuration conf;
-  private Journal journal;
+  private BalanceJournal journal;
 
   private Thread reader;
   private ThreadPoolExecutor workersPool;
@@ -78,7 +78,7 @@ public class ProcedureScheduler {
   private Thread recoverThread;
   private AtomicBoolean running = new AtomicBoolean(true);
 
-  public ProcedureScheduler(Configuration conf) {
+  public BalanceProcedureScheduler(Configuration conf) {
     this.conf = conf;
   }
 
@@ -102,8 +102,8 @@ public class ProcedureScheduler {
     this.reader.start();
 
     // init journal.
-    Class<Journal> clazz =
-        (Class<Journal>) conf.getClass(JOURNAL_CLASS, HDFSJournal.class);
+    Class<BalanceJournal> clazz =
+        (Class<BalanceJournal>) conf.getClass(JOURNAL_CLASS, HDFSJournal.class);
     journal = ReflectionUtils.newInstance(clazz, conf);
 
     recoverAllJobs();
@@ -112,7 +112,7 @@ public class ProcedureScheduler {
   /**
    * Submit the job.
    */
-  public synchronized void submit(Job job) throws IOException {
+  public synchronized void submit(BalanceJob job) throws IOException {
     if (!running.get()) {
       throw new IOException("Scheduler is shutdown.");
     }
@@ -128,8 +128,8 @@ public class ProcedureScheduler {
   /**
    * Remove the job from scheduler if it finishes.
    */
-  public Job remove(Job job) {
-    Job inner = findJob(job);
+  public BalanceJob remove(BalanceJob job) {
+    BalanceJob inner = findJob(job);
     if (inner == null) {
       return null;
     } else if (job.isJobDone()) {
@@ -146,9 +146,9 @@ public class ProcedureScheduler {
    * @return the job in scheduler. Null if the schedule has no job with the
    *         same id.
    */
-  public Job findJob(Job job) {
-    Job found = null;
-    for (Job j : jobSet.keySet()) {
+  public BalanceJob findJob(BalanceJob job) {
+    BalanceJob found = null;
+    for (BalanceJob j : jobSet.keySet()) {
       if (j.getId().equals(job.getId())) {
         found = j;
         break;
@@ -160,15 +160,15 @@ public class ProcedureScheduler {
   /**
    * Return all jobs in the scheduler.
    */
-  public Collection<Job> getAllJobs() {
+  public Collection<BalanceJob> getAllJobs() {
     return jobSet.values();
   }
 
   /**
    * Wait permanently until the job is done.
    */
-  public void waitUntilDone(Job job) {
-    Job found = findJob(job);
+  public void waitUntilDone(BalanceJob job) {
+    BalanceJob found = findJob(job);
     if (found == null || found.isJobDone()) {
       return;
     }
@@ -183,12 +183,12 @@ public class ProcedureScheduler {
   /**
    * Delay this job.
    */
-  void delay(Job job, long delayInMilliseconds) {
+  void delay(BalanceJob job, long delayInMilliseconds) {
     delayQueue.add(new DelayWrapper(job, delayInMilliseconds));
     LOG.info("Delay " + delayInMilliseconds + "ms job=" + job.getId());
   }
 
-  boolean jobDone(Job job) {
+  boolean jobDone(BalanceJob job) {
     try {
       journal.clear(job);
       if (job.removeAfterDone()) {
@@ -204,7 +204,7 @@ public class ProcedureScheduler {
   /**
    * Save current status to journal.
    */
-  boolean writeJournal(Job job) {
+  boolean writeJournal(BalanceJob job) {
     try {
       journal.saveJob(job);
       return true;
@@ -274,8 +274,8 @@ public class ProcedureScheduler {
    * scheduler starts.
    */
   private void recoverAllJobs() throws IOException {
-    Job[] jobs = journal.listAllJobs();
-    for (Job job : jobs) {
+    BalanceJob[] jobs = journal.listAllJobs();
+    for (BalanceJob job : jobs) {
       recoverQueue.add(job);
       jobSet.put(job, job);
     }
@@ -313,7 +313,7 @@ public class ProcedureScheduler {
     public void run() {
       while (running.get()) {
         try {
-          final Job job = runningQueue.take();
+          final BalanceJob job = runningQueue.take();
           workersPool.submit(() -> {
             LOG.info("Start job. job={}", job);
             job.execute();
@@ -344,7 +344,7 @@ public class ProcedureScheduler {
     @Override
     public void run() {
       while (running.get()) {
-        Job job = null;
+        BalanceJob job = null;
         try {
           job = recoverQueue.take();
         } catch (InterruptedException ie) {
@@ -353,7 +353,7 @@ public class ProcedureScheduler {
         if (job != null) {
           try {
             journal.recoverJob(job);
-            job.setScheduler(ProcedureScheduler.this);
+            job.setScheduler(BalanceProcedureScheduler.this);
             runningQueue.add(job);
             LOG.info("Recover success, add to runningQueue " + job.getId());
           } catch (IOException e) {
@@ -366,10 +366,10 @@ public class ProcedureScheduler {
   }
 
   class DelayWrapper implements Delayed {
-    Job job;
+    BalanceJob job;
     long time;
 
-    public DelayWrapper(Job job, long delayInMilliseconds) {
+    public DelayWrapper(BalanceJob job, long delayInMilliseconds) {
       this.job = job;
       this.time = Time.now() + delayInMilliseconds;
     }

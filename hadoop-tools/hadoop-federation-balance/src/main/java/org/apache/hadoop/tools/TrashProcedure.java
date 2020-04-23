@@ -20,7 +20,7 @@ package org.apache.hadoop.tools;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
-import org.apache.hadoop.hdfs.server.namenode.procedure.Procedure;
+import org.apache.hadoop.hdfs.procedure.BalanceProcedure;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -29,7 +29,7 @@ import java.io.IOException;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 import static org.apache.hadoop.tools.FedBalanceConfigs.*;
 
-public class TrashProcedure extends Procedure {
+public class TrashProcedure extends BalanceProcedure {
 
   private DistributedFileSystem srcFs;
   private FedBalanceContext context;
@@ -46,7 +46,7 @@ public class TrashProcedure extends Procedure {
   }
 
   @Override
-  public boolean execute(Procedure lastProcedure) throws IOException {
+  public boolean execute(BalanceProcedure lastProcedure) throws IOException {
     doExecute();
     return true;
   }

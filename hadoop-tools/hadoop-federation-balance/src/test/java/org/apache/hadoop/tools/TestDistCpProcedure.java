@@ -28,9 +28,9 @@ import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.tools.DistCpProcedure.Stage;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.hdfs.server.namenode.procedure.Job;
-import org.apache.hadoop.hdfs.server.namenode.procedure.Procedure.RetryException;
-import org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureScheduler;
+import org.apache.hadoop.hdfs.procedure.BalanceJob;
+import org.apache.hadoop.hdfs.procedure.BalanceProcedure.RetryException;
+import org.apache.hadoop.hdfs.procedure.BalanceProcedureScheduler;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.v2.MiniMRYarnCluster;
 import org.junit.AfterClass;
@@ -42,7 +42,7 @@ import java.net.URI;
 import java.util.Random;
 
 import static junit.framework.TestCase.assertTrue;
-import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.SCHEDULER_BASE_URI;
+import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.SCHEDULER_BASE_URI;
 import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
 import static org.apache.hadoop.test.LambdaTestUtils.intercept;
 import static org.apache.hadoop.tools.FedBalanceConfigs.CURRENT_SNAPSHOT_NAME;
@@ -96,7 +96,7 @@ public class TestDistCpProcedure {
     }
   }
 
-  @Test
+  @Test(timeout = 30000)
   public void testSuccessfulDistCpProcedure() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs = (DistributedFileSystem)
@@ -108,11 +108,11 @@ public class TestDistCpProcedure {
     FedBalanceContext context = new FedBalanceContext(src, dst, conf);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
-    ProcedureScheduler scheduler = new ProcedureScheduler(conf);
+    BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(conf);
     scheduler.init();
 
-    Job balanceJob =
-        new Job.Builder<>().nextProcedure(dcProcedure).build();
+    BalanceJob balanceJob =
+        new BalanceJob.Builder<>().nextProcedure(dcProcedure).build();
     scheduler.submit(balanceJob);
     scheduler.waitUntilDone(balanceJob);
     assertTrue(balanceJob.isJobDone());
@@ -125,7 +125,7 @@ public class TestDistCpProcedure {
     assertFalse(fs.exists(new Path(context.getDst(), ".snapshot")));
   }
 
-  @Test
+  @Test(timeout = 30000)
   public void testInitDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs = (DistributedFileSystem)
@@ -155,7 +155,7 @@ public class TestDistCpProcedure {
     assertTrue(fs.exists(new Path(dst, "a")));
   }
 
-  @Test
+  @Test(timeout = 120000)
   public void testDiffDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs = (DistributedFileSystem)
@@ -191,7 +191,7 @@ public class TestDistCpProcedure {
     assertEquals(len, fs.getFileStatus(new Path(dst, "a")).getLen());
   }
 
-  @Test
+  @Test(timeout = 60000)
   public void testStageFinalDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs = (DistributedFileSystem)
@@ -220,7 +220,7 @@ public class TestDistCpProcedure {
         "Expect RemoteException(LeaseExpiredException).", () -> out.close());
   }
 
-  @Test
+  @Test(timeout = 10000)
   public void testStageFinish() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs = (DistributedFileSystem)
@@ -245,7 +245,7 @@ public class TestDistCpProcedure {
     assertFalse(fs.exists(new Path(dst, ".snapshot")));
   }
 
-  @Test
+  @Test(timeout = 60000)
   public void testRecoveryByStage() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs = (DistributedFileSystem)
@@ -277,7 +277,7 @@ public class TestDistCpProcedure {
     assertFalse(fs.exists(new Path(context.getDst(), ".snapshot")));
   }
 
-  @Test
+  @Test(timeout = 30000)
   public void testShutdown() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs = (DistributedFileSystem)
@@ -289,11 +289,11 @@ public class TestDistCpProcedure {
     FedBalanceContext context = new FedBalanceContext(src, dst, conf);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
-    ProcedureScheduler scheduler = new ProcedureScheduler(conf);
+    BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(conf);
     scheduler.init();
 
-    Job balanceJob =
-        new Job.Builder<>().nextProcedure(dcProcedure).build();
+    BalanceJob balanceJob =
+        new BalanceJob.Builder<>().nextProcedure(dcProcedure).build();
     scheduler.submit(balanceJob);
 
     long sleep = Math.abs(new Random().nextLong()) % 10000;

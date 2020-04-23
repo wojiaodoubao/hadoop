@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.namenode.procedure;
+package org.apache.hadoop.hdfs.procedure;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 
@@ -24,7 +24,7 @@ import org.apache.hadoop.classification.InterfaceAudience;
  * used in hdfs procedure.
  */
 @InterfaceAudience.Private
-public class ProcedureConfigKeys {
+public class BalanceProcedureConfigKeys {
   public static final String WORK_THREAD_NUM = "hadoop.hdfs.procedure.work.thread.num";
   public static final int WORK_THREAD_NUM_DEFAULT = 10;
   public static final String SCHEDULER_BASE_URI =

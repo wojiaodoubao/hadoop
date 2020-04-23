@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.namenode.procedure;
+package org.apache.hadoop.hdfs.procedure;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -35,14 +35,14 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 
-import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.SCHEDULER_BASE_URI;
-import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.TMP_TAIL;
-import static org.apache.hadoop.hdfs.server.namenode.procedure.ProcedureConfigKeys.JOB_PREFIX;
+import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.SCHEDULER_BASE_URI;
+import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.TMP_TAIL;
+import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.JOB_PREFIX;
 
 /**
  * Journal based on HDFS.
  */
-public class HDFSJournal implements Journal {
+public class HDFSJournal implements BalanceJournal {
 
   public static final Logger LOG = LoggerFactory.getLogger(HDFSJournal.class);
 
@@ -59,7 +59,7 @@ public class HDFSJournal implements Journal {
   /**
    * Save job journal to HDFS.
    */
-  public void saveJob(Job job) throws IOException {
+  public void saveJob(BalanceJob job) throws IOException {
     Path jobFile = getNextJob(job);
     Path tmpJobFile =
         new Path(jobFile.getParent(), jobFile.getName() + TMP_TAIL);
@@ -84,7 +84,7 @@ public class HDFSJournal implements Journal {
   /**
    * Recover job from journal on HDFS.
    */
-  public void recoverJob(Job job) throws IOException {
+  public void recoverJob(BalanceJob job) throws IOException {
     assert job.getId() != null;
     FSDataInputStream in = null;
     try {
@@ -100,7 +100,7 @@ public class HDFSJournal implements Journal {
   }
 
   @Override
-  public Job[] listAllJobs() throws IOException {
+  public BalanceJob[] listAllJobs() throws IOException {
     FileSystem fs = FileSystem.get(workUri, conf);
     FileStatus status = null;
     try {
@@ -113,10 +113,10 @@ public class HDFSJournal implements Journal {
       throw new IOException(workUri + " must be a directory.");
     }
     FileStatus[] statuses = fs.listStatus(new Path(workUri.getPath()));
-    Job[] jobs = new Job[statuses.length];
+    BalanceJob[] jobs = new BalanceJob[statuses.length];
     for (int i = 0; i < statuses.length; i++) {
       if (statuses[i].isDirectory()) {
-        jobs[i] = new Job.Builder<>().build();
+        jobs[i] = new BalanceJob.Builder<>().build();
         jobs[i].setId(statuses[i].getPath().getName());
       }
     }
@@ -124,7 +124,7 @@ public class HDFSJournal implements Journal {
   }
 
   @Override
-  public void clear(Job job) throws IOException {
+  public void clear(BalanceJob job) throws IOException {
     Path jobBase = getJobBaseDir(job);
     FileSystem fs = FileSystem.get(workUri, conf);
     if (fs.exists(jobBase)) {
@@ -148,18 +148,18 @@ public class HDFSJournal implements Journal {
     return conf;
   }
 
-  private Path getJobBaseDir(Job job) {
+  private Path getJobBaseDir(BalanceJob job) {
     String jobId = job.getId();
     return new Path(workUri.getPath(), jobId);
   }
 
-  private Path getNextJob(Job job) {
+  private Path getNextJob(BalanceJob job) {
     Path basePath = getJobBaseDir(job);
     Path logPath = new Path(basePath, JOB_PREFIX + generator.nextValue());
     return logPath;
   }
 
-  private Path getLatestJob(Job job) throws IOException {
+  private Path getLatestJob(BalanceJob job) throws IOException {
     Path latestFile = null;
     Path basePath = getJobBaseDir(job);
     FileSystem fs = FileSystem.get(workUri, conf);

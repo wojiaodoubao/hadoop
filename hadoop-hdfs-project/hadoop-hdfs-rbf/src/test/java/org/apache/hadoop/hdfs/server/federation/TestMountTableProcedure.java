@@ -46,7 +46,7 @@ import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.creat
 import static org.apache.hadoop.hdfs.server.federation.store.FederationStateStoreTestUtils.synchronizeRecords;
 import static org.junit.Assert.*;
 
-public class TestSingleMountTableProcedure {
+public class TestMountTableProcedure {
 
   private static StateStoreDFSCluster cluster;
   private static RouterContext routerContext;
@@ -122,14 +122,14 @@ public class TestSingleMountTableProcedure {
 
     // test SingleMountTableProcedure updates the mount point.
     String dstNs = "ns1";
-    SingleMountTableProcedure smtp =
-        new SingleMountTableProcedure("single-mount-table-procedure", null,
+    MountTableProcedure smtp =
+        new MountTableProcedure("single-mount-table-procedure", null,
             1000, fedPath, dst, dstNs, routerConf);
     assertTrue(smtp.execute(null));
     stateStore.loadCache(MountTableStoreImpl.class, true);// load cache.
     // verify the mount entry is updated to /
     MountTable entry =
-        SingleMountTableProcedure.getMountEntry(fedPath, mountTable);
+        MountTableProcedure.getMountEntry(fedPath, mountTable);
     assertNotNull(entry);
     assertEquals(1, entry.getDestinations().size());
     String nsId = entry.getDestinations().get(0).getNameserviceId();
@@ -143,13 +143,13 @@ public class TestSingleMountTableProcedure {
     String fedPath = "/test-path";
     String dst = "/test-dst";
     String dstNs = "ns1";
-    SingleMountTableProcedure smtp =
-        new SingleMountTableProcedure("single-mount-table-procedure", null,
+    MountTableProcedure smtp =
+        new MountTableProcedure("single-mount-table-procedure", null,
             1000, fedPath, dst, dstNs, routerConf);
     ByteArrayOutputStream bao = new ByteArrayOutputStream();
     DataOutput dataOut = new DataOutputStream(bao);
     smtp.write(dataOut);
-    smtp = new SingleMountTableProcedure();
+    smtp = new MountTableProcedure();
     smtp.readFields(
         new DataInputStream(new ByteArrayInputStream(bao.toByteArray())));
     assertEquals(fedPath, smtp.getFedPath());
