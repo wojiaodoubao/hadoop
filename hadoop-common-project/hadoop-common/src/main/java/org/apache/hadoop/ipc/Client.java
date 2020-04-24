@@ -123,7 +123,7 @@ public class Client implements AutoCloseable {
     EXTERNAL_CALL_HANDLER.set(externalHandler);
   }
 
-  private final ConcurrentMap<ConnectionId, Connection> connections =
+  private final ConcurrentMap<ConnectionId, ConnectionBucket> connections =
       new ConcurrentHashMap<>();
   private final Object putLock = new Object();
   private final Object emptyCondition = new Object();
@@ -407,6 +407,58 @@ public class Client implements AutoCloseable {
     }
   }
 
+  private class ConnectionBucket {
+    private AtomicBoolean shouldCloseConnection = new AtomicBoolean(false);
+    private final ConnectionId id;
+    private final int serviceClass;
+    private Consumer<ConnectionBucket> removeMethod;
+    Connection[] list;
+    int currentIndex = 0;
+    int conSize = 0;
+
+    public ConnectionBucket(ConnectionId id, int serviceClass) {
+      this.id = id;
+      this.serviceClass = serviceClass;
+      this.list = new Connection[id.connectionSize];
+      this.removeMethod = cb -> {
+        final boolean removed = connections.remove(id, cb);
+        if (removed && connections.isEmpty()) {
+          synchronized (emptyCondition) {
+            emptyCondition.notify();
+          }
+        }
+      };
+    }
+
+    public synchronized void wakeUp() {
+      for (int i = 0; i < list.length; i++) {
+        if (list[i] != null) {
+          list[i].interrupt();
+          list[i].interruptConnectingThread();
+        }
+      }
+    }
+
+    public synchronized Connection getConnection() {
+      Connection con = list[currentIndex];
+      if (con == null) {
+        con = new Connection(id, serviceClass, removeMethod, this);
+        list[currentIndex] = con;
+        conSize++;
+      }
+      currentIndex = (currentIndex + 1) % list.length;
+      return con;
+    }
+
+    public int getConnectionSize() {
+      return conSize;
+    }
+
+    public void remove() {
+      removeMethod.accept(this);
+    }
+  }
+
   /** Thread that reads responses and notifies callers.  Each connection owns a
    * socket connected to a remote address.  Calls are multiplexed through this
    * socket: responses may be delivered out of order. */
@@ -437,16 +489,17 @@ public class Client implements AutoCloseable {
     // currently active calls
     private Hashtable<Integer, Call> calls = new Hashtable<Integer, Call>();
     private AtomicLong lastActivity = new AtomicLong();// last I/O activity time
-    private AtomicBoolean shouldCloseConnection = new AtomicBoolean();  // indicate if the connection is closed
+    private AtomicBoolean shouldCloseConnection;  // indicate if the connection is closed
     private IOException closeException; // close reason
     
     private final Object sendRpcRequestLock = new Object();
 
     private AtomicReference<Thread> connectingThread = new AtomicReference<>();
-    private final Consumer<Connection> removeMethod;
+    private final Consumer<ConnectionBucket> removeMethod;
+    private final ConnectionBucket bucket;
 
     Connection(ConnectionId remoteId, int serviceClass,
-        Consumer<Connection> removeMethod) {
+        Consumer<ConnectionBucket> removeMethod, ConnectionBucket bucket) {
       this.remoteId = remoteId;
       this.server = remoteId.getAddress();
 
@@ -487,6 +540,8 @@ public class Client implements AutoCloseable {
       }
       this.serviceClass = serviceClass;
       this.removeMethod = removeMethod;
+      this.bucket = bucket;
+      this.shouldCloseConnection = bucket.shouldCloseConnection;
 
       if (LOG.isDebugEnabled()) {
         LOG.debug("The ping interval is " + this.pingInterval + " ms.");
@@ -1078,9 +1133,13 @@ public class Client implements AutoCloseable {
 
     @Override
     public void run() {
-      if (LOG.isDebugEnabled())
-        LOG.debug(getName() + ": starting, having connections " 
-            + connections.size());
+      if (LOG.isDebugEnabled()) {
+        int total = 0;
+        for (ConnectionBucket cb : connections.values()) {
+          total += cb.getConnectionSize();
+        }
+        LOG.debug(getName() + ": starting, having connections " + total);
+      }
 
       try {
         while (waitForWork()) {//wait here for work - read or close connection
@@ -1095,10 +1154,14 @@ public class Client implements AutoCloseable {
       }
       
       close();
-      
-      if (LOG.isDebugEnabled())
-        LOG.debug(getName() + ": stopped, remaining connections "
-            + connections.size());
+
+      if (LOG.isDebugEnabled()) {
+        int total = 0;
+        for (ConnectionBucket cb : connections.values()) {
+          total += cb.getConnectionSize();
+        }
+        LOG.debug(getName() + ": stopped, remaining connections " + total);
+      }
     }
 
     /** Initiates a rpc call by sending the rpc request to the remote server.
@@ -1260,7 +1323,7 @@ public class Client implements AutoCloseable {
       // We have marked this connection as closed. Other thread could have
       // already known it and replace this closedConnection with a new one.
       // We should only remove this closedConnection.
-      removeMethod.accept(this);
+      removeMethod.accept(bucket);
 
       // close the streams and therefore the socket
       IOUtils.closeStream(ipcStreams);
@@ -1360,9 +1423,8 @@ public class Client implements AutoCloseable {
     }
 
     // wake up all connections
-    for (Connection conn : connections.values()) {
-      conn.interrupt();
-      conn.interruptConnectingThread();
+    for (ConnectionBucket cb : connections.values()) {
+      cb.wakeUp();
     }
     
     // wait until all connections are closed
@@ -1596,16 +1658,8 @@ public class Client implements AutoCloseable {
           new UnknownHostException());
     }
 
-    final Consumer<Connection> removeMethod = c -> {
-      final boolean removed = connections.remove(remoteId, c);
-      if (removed && connections.isEmpty()) {
-        synchronized (emptyCondition) {
-          emptyCondition.notify();
-        }
-      }
-    };
-
     Connection connection;
+    ConnectionBucket conBucket;
     /* we could avoid this allocation for each RPC by having a  
      * connectionsId object and with set() method. We need to manage the
      * refs for keys in HashMap properly. For now its ok.
@@ -1616,8 +1670,9 @@ public class Client implements AutoCloseable {
           throw new IOException("Failed to get connection for " + remoteId
               + ", " + call + ": " + this + " is already stopped");
         }
-        connection = connections.computeIfAbsent(remoteId,
-            id -> new Connection(id, serviceClass, removeMethod));
+        conBucket = connections.computeIfAbsent(remoteId,
+            id -> new ConnectionBucket(id, serviceClass));
+        connection = conBucket.getConnection();
       }
 
       if (connection.addCall(call)) {
@@ -1627,7 +1682,7 @@ public class Client implements AutoCloseable {
         // have already known this closedConnection, and replace it with a new
         // connection. So we should call conditional remove to make sure we only
         // remove this closedConnection.
-        removeMethod.accept(connection);
+        conBucket.remove();
       }
     }
 
@@ -1662,6 +1717,7 @@ public class Client implements AutoCloseable {
     private final int pingInterval; // how often sends ping to the server in msecs
     private String saslQop; // here for testing
     private final Configuration conf; // used to get the expected kerberos principal name
+    private final int connectionSize;
     
     ConnectionId(InetSocketAddress address, Class<?> protocol, 
                  UserGroupInformation ticket, int rpcTimeout,
@@ -1691,6 +1747,9 @@ public class Client implements AutoCloseable {
       this.doPing = conf.getBoolean(
           CommonConfigurationKeys.IPC_CLIENT_PING_KEY,
           CommonConfigurationKeys.IPC_CLIENT_PING_DEFAULT);
+      this.connectionSize = conf.getInt(
+          CommonConfigurationKeys.IPC_CLIENT_CONNECTION_SIZE_KEY,
+          CommonConfigurationKeys.IPC_CLIENT_CONNECTION_SIZE_DEFAULT);
       this.pingInterval = (doPing ? Client.getPingInterval(conf) : 0);
       this.conf = conf;
     }
