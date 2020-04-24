@@ -17,11 +17,13 @@
  */
 package org.apache.hadoop.hdfs;
 
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.HedgedRead.THREADPOOL_SIZE_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.EOFException;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -50,6 +52,7 @@ import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtocol;
 import org.apache.hadoop.hdfs.server.datanode.SimulatedFSDataset;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.util.Time;
 import org.apache.log4j.Level;
 import org.junit.Assert;
 import org.junit.Before;
@@ -505,6 +508,50 @@ public class TestPread {
       cleanupFile(fileSys, file1);
     } finally {
       fileSys.close();
+    }
+  }
+
+  @Test
+  public void testParallelPread() throws Exception {
+    final int PACKET_SIZE = 64 * 1024;
+    final int BLOCK_SIZE = PACKET_SIZE * 200;
+    final int FILE_LEN = BLOCK_SIZE * 10;
+    Configuration conf = new Configuration();
+    conf.setLong(DFSConfigKeys.DFS_NAMENODE_MIN_BLOCK_SIZE_KEY, BLOCK_SIZE);
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_SIZE);
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(2)
+        .build();
+    cluster.waitActive();
+    try {
+      Path file = new Path("/file-read-once");
+      DistributedFileSystem fs = cluster.getFileSystem();
+      Random r = new Random(12345L);
+      byte[] data = new byte[1024];
+      long size = 0;
+      FSDataOutputStream out = fs.create(file);
+      while (size < FILE_LEN) {
+        r.nextBytes(data);
+        out.write(data);
+        size += data.length;
+      }
+      out.close();
+
+      DFSInputStream in = (DFSInputStream) fs.open(file).getWrappedStream();
+      ByteBuffer pBuffer = ByteBuffer.allocate(FILE_LEN - BLOCK_SIZE);
+      ByteBuffer sBuffer = ByteBuffer.allocate(FILE_LEN - BLOCK_SIZE);
+      long parallelInterval = Time.monotonicNow();
+      in.readParallel(BLOCK_SIZE, pBuffer);
+      parallelInterval = Time.monotonicNow() - parallelInterval;
+      long serialInterval = Time.monotonicNow();
+      in.read(BLOCK_SIZE, sBuffer);
+      serialInterval = Time.monotonicNow() - serialInterval;
+      LOG.info("lijinglun:" + serialInterval + " " + parallelInterval);
+      assertTrue(serialInterval > parallelInterval);
+      assertEquals(sBuffer.position(), pBuffer.position());
+      assertEquals(sBuffer.limit(), pBuffer.limit());
+      assertTrue(Arrays.equals(sBuffer.array(), pBuffer.array()));
+    } finally {
+      cluster.shutdown();
     }
   }
 

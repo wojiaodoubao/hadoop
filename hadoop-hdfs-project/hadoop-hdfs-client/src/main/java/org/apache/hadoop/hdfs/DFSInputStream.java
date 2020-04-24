@@ -33,16 +33,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.CompletionService;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorCompletionService;
-import java.util.concurrent.Future;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -1297,7 +1290,7 @@ public class DFSInputStream extends FSInputStream
           if (future != null) {
             ByteBuffer result = future.get();
             result.flip();
-            buf.put(result);
+            buf.put(result);//TODO:上面bb不用allocate而用duplicate，是不是这里就不用拷贝了？反正两次读到东西肯定是一样的，应该是幂等的吧？
             return;
           }
           DFSClient.LOG.debug("Waited {}ms to read from {}; spawning hedged "
@@ -1388,8 +1381,8 @@ public class DFSInputStream extends FSInputStream
     throw new InterruptedException("let's retry");
   }
 
-  private void cancelAll(List<Future<ByteBuffer>> futures) {
-    for (Future<ByteBuffer> future : futures) {
+  private <T> void cancelAll(List<Future<T>> futures) {
+    for (Future<T> future : futures) {
       // Unfortunately, hdfs reads do not take kindly to interruption.
       // Threads return a variety of interrupted-type exceptions but
       // also complaints about invalid pbs -- likely because read
@@ -1447,10 +1440,10 @@ public class DFSInputStream extends FSInputStream
       return 0;
     }
     ByteBuffer bb = ByteBuffer.wrap(buffer, offset, length);
-    return pread(position, bb);
+    return pread(position, bb, false);
   }
 
-  private int pread(long position, ByteBuffer buffer)
+  private int pread(long position, ByteBuffer buffer, boolean parallel)
       throws IOException {
     // sanity checks
     dfsClient.checkOpen();
@@ -1471,34 +1464,94 @@ public class DFSInputStream extends FSInputStream
     // determine the block and byte range within the block
     // corresponding to position and realLen
     List<LocatedBlock> blockRange = getBlockRange(position, realLen);
-    int remaining = realLen;
     CorruptedBlocks corruptedBlocks = new CorruptedBlocks();
+    if (blockRange.size() > 1 & parallel) {
+      return readParallel(position, buffer, blockRange, realLen);
+    } else {
+      return readSingleThread(position, buffer, blockRange, realLen,
+          corruptedBlocks);
+    }
+  }
+
+  private int readSingleThread(long position, ByteBuffer buffer,
+      List<LocatedBlock> blockRange, int realLen,
+      CorruptedBlocks corruptedBlocks) throws IOException {
+    int remaining = realLen;
     for (LocatedBlock blk : blockRange) {
       long targetStart = position - blk.getStartOffset();
       int bytesToRead = (int) Math.min(remaining,
           blk.getBlockSize() - targetStart);
       long targetEnd = targetStart + bytesToRead - 1;
-      try {
-        if (dfsClient.isHedgedReadsEnabled() && !blk.isStriped()) {
-          hedgedFetchBlockByteRange(blk, targetStart,
-              targetEnd, buffer, corruptedBlocks);
-        } else {
-          fetchBlockByteRange(blk, targetStart, targetEnd,
-              buffer, corruptedBlocks);
-        }
-      } finally {
-        // Check and report if any block replicas are corrupted.
-        // BlockMissingException may be caught if all block replicas are
-        // corrupted.
-        reportCheckSumFailure(corruptedBlocks, blk.getLocations().length,
-            false);
-      }
-
+      doRead(targetStart, targetEnd, blk, buffer, corruptedBlocks);
       remaining -= bytesToRead;
       position += bytesToRead;
     }
     assert remaining == 0 : "Wrong number of bytes read.";
     return realLen;
+  }
+
+  private int readParallel(long position, ByteBuffer buffer,
+      List<LocatedBlock> blockRange, int realLen) throws IOException {
+    int remaining = realLen;
+    CorruptedBlocks corruptedBlocks = new CorruptedBlocks();
+    List<Future<Boolean>> futures = new ArrayList<>();
+    ThreadPoolExecutor threadPool = DFSUtilClient
+        .getThreadPoolExecutor(blockRange.size(), blockRange.size(), 60,
+            "Parallel-pRead-", true);
+    CompletionService<Boolean> hedgedService =
+        new ExecutorCompletionService<>(threadPool);
+    for (LocatedBlock blk : blockRange) {
+      long targetStart = position - blk.getStartOffset();
+      int bytesToRead = (int) Math.min(remaining,
+          blk.getBlockSize() - targetStart);
+      long targetEnd = targetStart + bytesToRead - 1;
+      ByteBuffer buf = buffer.duplicate();
+      buf.limit(buf.position()+bytesToRead);
+      buffer.position(buf.position()+bytesToRead);
+      futures.add(hedgedService.submit(
+          () -> doRead(targetStart, targetEnd, blk, buf, corruptedBlocks)));
+      remaining -= bytesToRead;
+      position += bytesToRead;
+    }
+    try {
+      while (!futures.isEmpty()) {
+        Future<Boolean> f = hedgedService.take();
+        futures.remove(f);
+        if (f.get()) {
+          throw new IOException("The buffer is not fully filled.");
+        }
+      }
+    } catch (InterruptedException e) {
+      throw new IOException("pread failed", e);
+    } catch (ExecutionException e) {
+      if (e.getCause() instanceof IOException) {
+        throw (IOException) e.getCause();
+      } else {
+        throw new IOException("pread failed", e);
+      }
+    } finally {
+      cancelAll(futures);
+    }
+    assert remaining == 0 : "Wrong number of bytes read.";
+    return realLen;
+  }
+
+  private boolean doRead(long targetStart, long targetEnd, LocatedBlock blk,
+      ByteBuffer buf, CorruptedBlocks corruptedBlocks) {
+    try {
+      if (dfsClient.isHedgedReadsEnabled() && !blk.isStriped()) {
+        hedgedFetchBlockByteRange(blk, targetStart, targetEnd, buf,
+            corruptedBlocks);
+      } else {
+        fetchBlockByteRange(blk, targetStart, targetEnd, buf, corruptedBlocks);
+      }
+    } finally {
+      // Check and report if any block replicas are corrupted.
+      // BlockMissingException may be caught if all block replicas are
+      // corrupted.
+      reportCheckSumFailure(corruptedBlocks, blk.getLocations().length, false);
+      return buf.hasRemaining();
+    }
   }
 
   /**
@@ -1692,7 +1745,15 @@ public class DFSInputStream extends FSInputStream
     if (!buf.hasRemaining()) {
       return 0;
     }
-    return pread(position, buf);
+    return pread(position, buf, false);
+  }
+
+  public int readParallel(long position, final ByteBuffer buf)
+      throws IOException {
+    if (!buf.hasRemaining()) {
+      return 0;
+    }
+    return pread(position, buf, true);
   }
 
   @Override
