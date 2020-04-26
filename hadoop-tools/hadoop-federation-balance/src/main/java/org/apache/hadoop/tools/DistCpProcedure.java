@@ -19,7 +19,9 @@ package org.apache.hadoop.tools;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.*;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
@@ -47,7 +49,13 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 
-import static org.apache.hadoop.tools.FedBalanceConfigs.*;
+import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_MAP_NUM;
+import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_MAP_NUM_DEFAULT;
+import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_BAND_WIDTH_LIMIT;
+import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_BAND_WIDTH_LIMIT_DEFAULT;
+import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_FORCE_CLOSE_OPEN_FILES;
+import static org.apache.hadoop.tools.FedBalanceConfigs.CURRENT_SNAPSHOT_NAME;
+import static org.apache.hadoop.tools.FedBalanceConfigs.LAST_SNAPSHOT_NAME;
 
 /**
  * Copy data through distcp. Super user privilege needed.
@@ -85,6 +93,14 @@ public class DistCpProcedure extends BalanceProcedure {
   public DistCpProcedure() {
   }
 
+  /**
+   * The constructor of DistCpProcedure.
+   *
+   * @param name the name of the procedure.
+   * @param nextProcedure the name of the next procedure.
+   * @param delayDuration the delay duration when this procedure is delayed.
+   * @param context the federation balance context.
+   */
   public DistCpProcedure(String name, String nextProcedure, long delayDuration,
       FedBalanceContext context) throws IOException {
     super(name, nextProcedure, delayDuration);
@@ -106,7 +122,7 @@ public class DistCpProcedure extends BalanceProcedure {
   @Override
   public boolean execute(BalanceProcedure lastProcedure)
       throws RetryException, IOException {
-    LOG.info("Stage=" + stage.name());
+    LOG.info("Stage={}", stage.name());
     switch (stage) {
     case PRE_CHECK:
       preCheck();
@@ -123,8 +139,9 @@ public class DistCpProcedure extends BalanceProcedure {
     case FINISH:
       finish();
       return true;
+    default:
+      throw new IOException("Unexpected stage=" + stage);
     }
-    return false;
   }
 
   void preCheck() throws IOException {
@@ -149,12 +166,12 @@ public class DistCpProcedure extends BalanceProcedure {
     if (job != null) {
       // the distcp has been submitted.
       if (job.isComplete()) {
-        jobId = null;// unset jobId because the job is done.
+        jobId = null; // unset jobId because the job is done.
         if (job.isSuccessful()) {
           stage = Stage.DIFF_DISTCP;
           return;
         } else {
-          LOG.warn("DistCp failed. Failure: " + job.getFailureInfo());
+          LOG.warn("DistCp failed. Failure={}", job.getFailureInfo());
         }
       } else {
         throw new RetryException();
@@ -169,7 +186,8 @@ public class DistCpProcedure extends BalanceProcedure {
   }
 
   /**
-   * The distcp copying diffs between LAST_SNAPSHOT_NAME and CURRENT_SNAPSHOT_NAME.
+   * The distcp copying diffs between LAST_SNAPSHOT_NAME and
+   * CURRENT_SNAPSHOT_NAME.
    */
   void diffDistCp() throws IOException, RetryException {
     RunningJob job = getCurrentJob();
@@ -177,14 +195,13 @@ public class DistCpProcedure extends BalanceProcedure {
       if (job.isComplete()) {
         jobId = null;
         if (job.isSuccessful()) {
-          LOG.info("DistCp succeeded. jobId={}", job.getFailureInfo());
+          LOG.info("DistCp succeeded. jobId={}", job.getID().toString());
         } else {
-          throw new IOException(
-              "DistCp failed. jobId=" + job.getID() + "failure=" + job
-                  .getFailureInfo());
+          throw new IOException("DistCp failed. jobId=" + job.getID().toString()
+              + " failure=" + job.getFailureInfo());
         }
       } else {
-        throw new RetryException();// wait job complete.
+        throw new RetryException(); // wait job complete.
       }
     } else if (!verifyDiff()) {
       if (!verifyOpenFiles()) {
@@ -336,13 +353,13 @@ public class DistCpProcedure extends BalanceProcedure {
   }
 
   /**
-   * Submit distcp job and return jobId;
+   * Submit distcp job and return jobId.
    */
   private String submitDistCpJob(String src, String dst,
       boolean useSnapshotDiff) throws IOException {
     List<String> command = new ArrayList<>();
     command.addAll(Arrays
-        .asList(new String[] { "-async", "-update", "-append", "-pruxgpcab" }));
+        .asList(new String[] {"-async", "-update", "-append", "-pruxgpcab"}));
     if (useSnapshotDiff) {
       command.add("-diff");
       command.add(LAST_SNAPSHOT_NAME);
@@ -361,7 +378,7 @@ public class DistCpProcedure extends BalanceProcedure {
       distCp = new DistCp(config,
           OptionsParser.parse(command.toArray(new String[]{})));
       Job job = distCp.createAndSubmitJob();
-      LOG.info("Submit distcp job:" + job);
+      LOG.info("Submit distcp job={}", job);
       return job.getJobID().toString();
     } catch (Exception e) {
       throw new IOException("Submit job failed.", e);

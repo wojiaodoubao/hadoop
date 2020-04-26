@@ -28,6 +28,7 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Time;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.io.ByteArrayOutputStream;
@@ -37,19 +38,22 @@ import java.io.DataOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.SCHEDULER_BASE_URI;
+import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.SCHEDULER_JOURNAL_URI;
 import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.WORK_THREAD_NUM;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotSame;
+import static org.mockito.ArgumentMatchers.any;
 
 public class TestBalanceProcedureScheduler {
 
   private static MiniDFSCluster cluster;
   private static final Configuration CONF = new Configuration();
   private static DistributedFileSystem fs;
+  private static final int DEFAULT_BLOCK_SIZE = 512;
 
   @BeforeClass
   public static void setup() throws IOException {
@@ -57,7 +61,6 @@ public class TestBalanceProcedureScheduler {
         true);
     CONF.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY, "hdfs:///");
     CONF.setBoolean("dfs.namenode.acls.enabled", true);
-    final int DEFAULT_BLOCK_SIZE = 512;
     CONF.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
     CONF.setInt(WORK_THREAD_NUM, 1);
 
@@ -68,7 +71,7 @@ public class TestBalanceProcedureScheduler {
     fs = cluster.getFileSystem();
     String workPath =
         "hdfs://" + cluster.getNameNode().getHostAndPort() + "/procedure";
-    CONF.set(SCHEDULER_BASE_URI, workPath);
+    CONF.set(SCHEDULER_JOURNAL_URI, workPath);
     fs.mkdirs(new Path(workPath));
   }
 
@@ -78,17 +81,18 @@ public class TestBalanceProcedureScheduler {
   @Test(timeout = 30000)
   public void testShutdownScheduler() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
-    scheduler.init();
+    scheduler.init(true);
     // construct job
     BalanceJob.Builder builder = new BalanceJob.Builder<>();
     builder.nextProcedure(new WaitProcedure("wait", 1000, 30 * 1000));
     BalanceJob job = builder.build();
 
     scheduler.submit(job);
-    Thread.sleep(1000);// wait job to be scheduled.
+    Thread.sleep(1000); // wait job to be scheduled.
     scheduler.shutDownAndWait(30 * 1000);
 
-    BalanceJournal journal = ReflectionUtils.newInstance(HDFSJournal.class, CONF);
+    BalanceJournal journal =
+        ReflectionUtils.newInstance(HDFSJournal.class, CONF);
     journal.clear(job);
   }
 
@@ -98,7 +102,7 @@ public class TestBalanceProcedureScheduler {
   @Test(timeout = 30000)
   public void testSuccessfulJob() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
-    scheduler.init();
+    scheduler.init(true);
     try {
       // construct job
       List<RecordProcedure> procedures = new ArrayList<>();
@@ -114,9 +118,9 @@ public class TestBalanceProcedureScheduler {
       scheduler.waitUntilDone(job);
       assertNull(job.error());
       // verify finish list.
-      assertEquals(5, RecordProcedure.finish.size());
-      for (int i = 0; i < RecordProcedure.finish.size(); i++) {
-        assertEquals(procedures.get(i), RecordProcedure.finish.get(i));
+      assertEquals(5, RecordProcedure.getFinishList().size());
+      for (int i = 0; i < RecordProcedure.getFinishList().size(); i++) {
+        assertEquals(procedures.get(i), RecordProcedure.getFinishList().get(i));
       }
     } finally {
       scheduler.shutDownAndWait(2);
@@ -129,7 +133,7 @@ public class TestBalanceProcedureScheduler {
   @Test
   public void testFailedJob() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
-    scheduler.init();
+    scheduler.init(true);
     try {
       BalanceJob.Builder builder = new BalanceJob.Builder<>();
       builder.nextProcedure(
@@ -152,11 +156,11 @@ public class TestBalanceProcedureScheduler {
   @Test
   public void testGetJobAfterRecover() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
-    scheduler.init();
+    scheduler.init(true);
     try {
       // construct job
       BalanceJob.Builder builder = new BalanceJob.Builder<>();
-      builder.addProcedure(new WaitProcedure("wait", 1000, 1000))
+      builder.nextProcedure(new WaitProcedure("wait", 1000, 1000))
           .removeAfterDone(false);
       BalanceJob job = builder.build();
       scheduler.submit(job);
@@ -164,7 +168,7 @@ public class TestBalanceProcedureScheduler {
 
       // restart scheduler and recover the job.
       scheduler = new BalanceProcedureScheduler(CONF);
-      scheduler.init();
+      scheduler.init(true);
       scheduler.waitUntilDone(job);
 
       BalanceJob recoverJob = scheduler.findJob(job);
@@ -182,7 +186,7 @@ public class TestBalanceProcedureScheduler {
   @Test(timeout = 5000)
   public void testRetry() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
-    scheduler.init();
+    scheduler.init(true);
     try {
       // construct job
       BalanceJob.Builder builder = new BalanceJob.Builder<>();
@@ -209,7 +213,7 @@ public class TestBalanceProcedureScheduler {
   @Test(timeout = 5000)
   public void testEmptyJob() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
-    scheduler.init();
+    scheduler.init(true);
     try {
       BalanceJob job = new BalanceJob.Builder<>().build();
       scheduler.submit(job);
@@ -249,17 +253,18 @@ public class TestBalanceProcedureScheduler {
   @Test(timeout = 5000)
   public void testSchedulerDownAndRecoverJob() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
-    scheduler.init();
+    scheduler.init(true);
 
     try {
       // construct job
       BalanceJob.Builder builder = new BalanceJob.Builder<>();
-      MultiPhaseProcedure multiPhaseProcedure = new MultiPhaseProcedure("retry", 1000, 10);
-      builder.addProcedure(multiPhaseProcedure);
+      MultiPhaseProcedure multiPhaseProcedure =
+          new MultiPhaseProcedure("retry", 1000, 10);
+      builder.nextProcedure(multiPhaseProcedure);
       BalanceJob job = builder.build();
 
       scheduler.submit(job);
-      Thread.sleep(500);// wait procedure to be scheduled.
+      Thread.sleep(500); // wait procedure to be scheduled.
       scheduler.shutDownAndWait(2);
 
       int before = MultiPhaseProcedure.getCounter();
@@ -268,7 +273,7 @@ public class TestBalanceProcedureScheduler {
 
       // restart scheduler, test recovering the job.
       scheduler = new BalanceProcedureScheduler(CONF);
-      scheduler.init();
+      scheduler.init(true);
       scheduler.waitUntilDone(job);
       int after = MultiPhaseProcedure.getCounter();
       assertEquals(10, after + before);
@@ -279,7 +284,8 @@ public class TestBalanceProcedureScheduler {
 
   @Test(timeout = 5000)
   public void testRecoverJobFromJournal() throws Exception {
-    BalanceJournal journal = ReflectionUtils.newInstance(HDFSJournal.class, CONF);
+    BalanceJournal journal =
+        ReflectionUtils.newInstance(HDFSJournal.class, CONF);
     BalanceJob.Builder builder = new BalanceJob.Builder<RecordProcedure>();
     BalanceProcedure wait0 = new WaitProcedure("wait0", 1000, 5000);
     BalanceProcedure wait1 = new WaitProcedure("wait1", 1000, 1000);
@@ -293,11 +299,38 @@ public class TestBalanceProcedureScheduler {
 
     long start = Time.now();
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
-    scheduler.init();
+    scheduler.init(true);
     try {
       scheduler.waitUntilDone(job);
       long duration = Time.now() - start;
       assertTrue(duration >= 1000 && duration < 5000);
+    } finally {
+      scheduler.shutDownAndWait(2);
+    }
+  }
+
+  @Test(timeout = 5000)
+  public void testClearJournalFail() throws Exception {
+    BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
+    scheduler.init(true);
+
+    BalanceJournal journal = Mockito.mock(BalanceJournal.class);
+    AtomicInteger count = new AtomicInteger(0);
+    Mockito.doAnswer(invocation -> {
+      if (count.incrementAndGet() == 1) {
+        throw new IOException("Mock clear failure");
+      }
+      return null;
+    }).when(journal).clear(any(BalanceJob.class));
+    scheduler.setJournal(journal);
+
+    try {
+      BalanceJob.Builder builder = new BalanceJob.Builder<>();
+      builder.nextProcedure(new WaitProcedure("wait", 1000, 1000));
+      BalanceJob job = builder.build();
+      scheduler.submit(job);
+      scheduler.waitUntilDone(job);
+      assertEquals(2, count.get());
     } finally {
       scheduler.shutDownAndWait(2);
     }
@@ -309,7 +342,7 @@ public class TestBalanceProcedureScheduler {
   @Test(timeout = 30000)
   public void testJobRecoveryWhenWriteJournalFail() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
-    scheduler.init();
+    scheduler.init(true);
 
     try {
       // construct job

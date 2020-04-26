@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,22 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/**
+ * Classes under this package implement a state machine used for balancing data
+ * across federation namespaces.
+ */
+@InterfaceAudience.Private
+@InterfaceStability.Evolving
+
 package org.apache.hadoop.hdfs.procedure;
 
 import org.apache.hadoop.classification.InterfaceAudience;
-
-/**
- * This class contains constants for configuration keys and default values
- * used in hdfs procedure.
- */
-@InterfaceAudience.Private
-public interface BalanceProcedureConfigKeys {
-  /* The worker threads number of the BalanceProcedureScheduler */
-  String WORK_THREAD_NUM = "hadoop.hdfs.procedure.work.thread.num";
-  int WORK_THREAD_NUM_DEFAULT = 10;
-  /* The uri of the journal */
-  String SCHEDULER_JOURNAL_URI = "hadoop.hdfs.procedure.scheduler.journal.uri";
-  String JOB_PREFIX = "JOB-";
-  String TMP_TAIL = ".tmp";
-  String JOURNAL_CLASS = "hadoop.hdfs.procedure.journal.class";
-}
+import org.apache.hadoop.classification.InterfaceStability;

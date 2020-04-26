@@ -35,7 +35,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 
-import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.SCHEDULER_BASE_URI;
+import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.SCHEDULER_JOURNAL_URI;
 import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.TMP_TAIL;
 import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.JOB_PREFIX;
 
@@ -135,7 +135,7 @@ public class HDFSJournal implements BalanceJournal {
   @Override
   public void setConf(Configuration conf) {
     try {
-      this.workUri = new URI(conf.get(SCHEDULER_BASE_URI));
+      this.workUri = new URI(conf.get(SCHEDULER_JOURNAL_URI));
     } catch (URISyntaxException e) {
       throw new IllegalArgumentException("URI resolution failed.", e);
     }

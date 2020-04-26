@@ -27,8 +27,12 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
-import static org.apache.hadoop.tools.FedBalanceConfigs.*;
+import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_MOVE_TO_TRASH;
+import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_MOVE_TO_TRASH_DEFAULT;
 
+/**
+ * This procedure moves the source path to the corresponding trash.
+ */
 public class TrashProcedure extends BalanceProcedure {
 
   private DistributedFileSystem srcFs;
@@ -37,6 +41,14 @@ public class TrashProcedure extends BalanceProcedure {
 
   public TrashProcedure() {}
 
+  /**
+   * The constructor of TrashProcedure.
+   *
+   * @param name the name of the procedure.
+   * @param nextProcedure the name of the next procedure.
+   * @param delayDuration the delay duration when this procedure is delayed.
+   * @param context the federation balance context.
+   */
   public TrashProcedure(String name, String nextProcedure, long delayDuration,
       FedBalanceContext context) throws IOException {
     super(name, nextProcedure, delayDuration);
@@ -47,11 +59,14 @@ public class TrashProcedure extends BalanceProcedure {
 
   @Override
   public boolean execute(BalanceProcedure lastProcedure) throws IOException {
-    doExecute();
+    moveToTrash();
     return true;
   }
 
-  void doExecute() throws IOException {
+  /**
+   * Delete source path to trash.
+   */
+  void moveToTrash() throws IOException {
     if (srcFs.exists(context.getSrc())) {
       if (conf.getBoolean(DISTCP_PROCEDURE_MOVE_TO_TRASH,
           DISTCP_PROCEDURE_MOVE_TO_TRASH_DEFAULT)) {

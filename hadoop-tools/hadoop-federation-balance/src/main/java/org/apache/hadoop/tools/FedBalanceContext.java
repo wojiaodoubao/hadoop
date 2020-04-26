@@ -25,17 +25,27 @@ import org.apache.hadoop.io.Writable;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
 
+/**
+ * This class contains the basic information needed when Federation Balance.
+ */
 public class FedBalanceContext implements Writable {
 
+  /* the source path in the source sub-cluster */
   private Path src;
+  /* the target path in the target sub-cluster */
   private Path dst;
   private Configuration conf;
 
   public FedBalanceContext() {}
 
+  /**
+   * Constructor of FedBalanceContext.
+   *
+   * @param src the source path in the source sub-cluster.
+   * @param dst the target path in the target sub-cluster.
+   * @param conf the configuration.
+   */
   public FedBalanceContext(Path src, Path dst, Configuration conf) {
     this.src = src;
     this.dst = dst;

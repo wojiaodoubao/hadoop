@@ -20,12 +20,13 @@ package org.apache.hadoop.hdfs.procedure;
 import java.io.IOException;
 
 /**
- * UnrecoverableProcedure will lose the handler if it's recovered.
+ * This simulates a Procedure can not be recovered. This is used for test.
  */
 public class UnrecoverableProcedure extends BalanceProcedure {
 
   public interface Call {
-    boolean execute(BalanceProcedure lastProcedure) throws RetryException, IOException;
+    boolean execute(BalanceProcedure lastProcedure)
+        throws RetryException, IOException;
   }
 
   private Call handler;

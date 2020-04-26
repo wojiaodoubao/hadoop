@@ -29,7 +29,7 @@ import java.io.IOException;
  */
 public class WaitProcedure extends BalanceProcedure {
 
-  long waitTime;
+  private long waitTime;
 
   public WaitProcedure() {
   }

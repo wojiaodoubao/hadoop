@@ -31,6 +31,9 @@ import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+/**
+ * Test TrashProcedure.
+ */
 public class TestTrashProcedure {
 
   private static Configuration conf;
@@ -64,7 +67,7 @@ public class TestTrashProcedure {
     FedBalanceContext context = new FedBalanceContext(src, dst, conf);
     TrashProcedure trashProcedure =
         new TrashProcedure("trash-procedure", null, 1000, context);
-    trashProcedure.doExecute();
+    trashProcedure.moveToTrash();
     assertFalse(fs.exists(src));
   }
 }

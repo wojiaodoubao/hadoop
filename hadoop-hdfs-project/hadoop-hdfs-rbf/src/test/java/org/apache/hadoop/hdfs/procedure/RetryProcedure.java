@@ -21,6 +21,9 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+/**
+ * This simulates a procedure needs many retries. This is used for test.
+ */
 public class RetryProcedure extends BalanceProcedure {
 
   private int retryTime = 1;

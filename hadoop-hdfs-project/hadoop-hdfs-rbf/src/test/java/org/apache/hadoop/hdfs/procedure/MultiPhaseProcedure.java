@@ -21,11 +21,14 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+/**
+ * This simulates a procedure with many phases. This is used for test.
+ */
 public class MultiPhaseProcedure extends BalanceProcedure {
 
   private int totalPhase;
   private int currentPhase = 0;
-  static int counter = 0;
+  private static int counter = 0;
 
   public MultiPhaseProcedure() {}
 
@@ -38,7 +41,7 @@ public class MultiPhaseProcedure extends BalanceProcedure {
   public boolean execute(BalanceProcedure lastProcedure)
       throws RetryException, IOException {
     if (currentPhase < totalPhase) {
-      LOG.info("phase " + currentPhase);
+      LOG.info("phase {}", currentPhase);
       currentPhase++;
       counter++;
       try {

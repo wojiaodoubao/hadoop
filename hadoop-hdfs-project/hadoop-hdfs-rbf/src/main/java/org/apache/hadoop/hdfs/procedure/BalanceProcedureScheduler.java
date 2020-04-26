@@ -82,7 +82,12 @@ public class BalanceProcedureScheduler {
     this.conf = conf;
   }
 
-  public synchronized void init() throws URISyntaxException, IOException {
+  /**
+   * Init the scheduler.
+   *
+   * @param recoverJobs whether to recover all the jobs from journal or not.
+   */
+  public synchronized void init(boolean recoverJobs) throws IOException {
     this.runningQueue = new LinkedBlockingQueue<>();
     this.delayQueue = new DelayQueue<>();
     this.recoverQueue = new LinkedBlockingQueue<>();
@@ -106,7 +111,9 @@ public class BalanceProcedureScheduler {
         (Class<BalanceJournal>) conf.getClass(JOURNAL_CLASS, HDFSJournal.class);
     journal = ReflectionUtils.newInstance(clazz, conf);
 
-    recoverAllJobs();
+    if (recoverJobs) {
+      recoverAllJobs();
+    }
   }
 
   /**
@@ -185,7 +192,8 @@ public class BalanceProcedureScheduler {
    */
   void delay(BalanceJob job, long delayInMilliseconds) {
     delayQueue.add(new DelayWrapper(job, delayInMilliseconds));
-    LOG.info("Delay " + delayInMilliseconds + "ms job=" + job.getId());
+    LOG.info("Need delay {}ms. Add to delayQueue. job={}", delayInMilliseconds,
+        job.getId());
   }
 
   boolean jobDone(BalanceJob job) {
@@ -196,7 +204,9 @@ public class BalanceProcedureScheduler {
       }
       return true;
     } catch (IOException e) {
-      LOG.warn("Failed finish job " + job.getId(), e);
+      LOG.warn("Clear journal failed, add to recoverQueue. job=" + job.getId(),
+          e);
+      recoverQueue.add(job);
       return false;
     }
   }
@@ -209,7 +219,8 @@ public class BalanceProcedureScheduler {
       journal.saveJob(job);
       return true;
     } catch (Exception e) {
-      LOG.warn("Save procedure failed, add to recoverQueue " + job.getId(), e);
+      LOG.warn("Save procedure failed, add to recoverQueue. job=" + job.getId(),
+          e);
       recoverQueue.add(job);
       return false;
     }
@@ -286,6 +297,10 @@ public class BalanceProcedureScheduler {
     return "job-" + UUID.randomUUID();
   }
 
+  @VisibleForTesting
+  public void setJournal(BalanceJournal journal) {
+    this.journal = journal;
+  }
 
   /**
    * This thread consumes the delayQueue and move the jobs to the runningQueue.
@@ -296,8 +311,8 @@ public class BalanceProcedureScheduler {
       while (running.get()) {
         try {
           DelayWrapper dJob = delayQueue.take();
-          runningQueue.add(dJob.job);
-          LOG.info("Wake up " + dJob.job);
+          runningQueue.add(dJob.getJob());
+          LOG.info("Wake up job={}", dJob.getJob());
         } catch (InterruptedException e) {
           // ignore interrupt exception.
         }
@@ -322,7 +337,7 @@ public class BalanceProcedureScheduler {
             }
             if (job.isJobDone()) {
               if (job.error() == null) {
-                LOG.info("Job done. job=" + job.getId());
+                LOG.info("Job done. job={}", job.getId());
               } else {
                 LOG.warn("Job failed. job=" + job.getId(), job.error());
               }
@@ -355,9 +370,11 @@ public class BalanceProcedureScheduler {
             journal.recoverJob(job);
             job.setScheduler(BalanceProcedureScheduler.this);
             runningQueue.add(job);
-            LOG.info("Recover success, add to runningQueue " + job.getId());
+            LOG.info("Recover success, add to runningQueue. job={}",
+                job.getId());
           } catch (IOException e) {
-            LOG.warn("Recover failed, re-add to recoverQueue " + job.getId(), e);
+            LOG.warn("Recover failed, re-add to recoverQueue. job="
+                + job.getId(), e);
             recoverQueue.add(job);
           }
         }
@@ -365,13 +382,20 @@ public class BalanceProcedureScheduler {
     }
   }
 
-  class DelayWrapper implements Delayed {
-    BalanceJob job;
-    long time;
+  /**
+   * Wrap the delayed BalanceJob.
+   */
+  private class DelayWrapper implements Delayed {
+    private BalanceJob job;
+    private long time;
 
-    public DelayWrapper(BalanceJob job, long delayInMilliseconds) {
+    DelayWrapper(BalanceJob job, long delayInMilliseconds) {
       this.job = job;
       this.time = Time.now() + delayInMilliseconds;
+    }
+
+    BalanceJob getJob() {
+      return job;
     }
 
     @Override
@@ -386,6 +410,14 @@ public class BalanceProcedureScheduler {
     @Override
     public int compareTo(Delayed o) {
       return Ints.saturatedCast(this.time - ((DelayWrapper) o).time);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (obj instanceof DelayWrapper) {
+        return compareTo((Delayed) obj) == 0;
+      }
+      return false;
     }
   }
 }

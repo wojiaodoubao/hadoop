@@ -37,18 +37,29 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.DataOutput;
+import java.io.DataInputStream;
+import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.util.Random;
 
 import static junit.framework.TestCase.assertTrue;
-import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.SCHEDULER_BASE_URI;
+import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.SCHEDULER_JOURNAL_URI;
 import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
 import static org.apache.hadoop.test.LambdaTestUtils.intercept;
 import static org.apache.hadoop.tools.FedBalanceConfigs.CURRENT_SNAPSHOT_NAME;
 import static org.apache.hadoop.tools.FedBalanceConfigs.LAST_SNAPSHOT_NAME;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertEquals;
 
+/**
+ * Test DistCpProcedure.
+ */
 public class TestDistCpProcedure {
   private static MiniDFSCluster cluster;
   private static MiniMRYarnCluster mrCluster;
@@ -81,7 +92,7 @@ public class TestDistCpProcedure {
 
     String workPath =
         "hdfs://" + cluster.getNameNode().getHostAndPort() + "/procedure";
-    conf.set(SCHEDULER_BASE_URI, workPath);
+    conf.set(SCHEDULER_JOURNAL_URI, workPath);
 
     nnUri = FileSystem.getDefaultUri(conf).toString();
   }
@@ -109,7 +120,7 @@ public class TestDistCpProcedure {
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(conf);
-    scheduler.init();
+    scheduler.init(true);
 
     BalanceJob balanceJob =
         new BalanceJob.Builder<>().nextProcedure(dcProcedure).build();
@@ -290,7 +301,7 @@ public class TestDistCpProcedure {
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(conf);
-    scheduler.init();
+    scheduler.init(true);
 
     BalanceJob balanceJob =
         new BalanceJob.Builder<>().nextProcedure(dcProcedure).build();
@@ -320,10 +331,10 @@ public class TestDistCpProcedure {
   }
 
   static class FileEntry {
-    String path;
-    boolean isDir;
+    private String path;
+    private boolean isDir;
 
-    public FileEntry(String path, boolean isDir) {
+    FileEntry(String path, boolean isDir) {
       this.path = path;
       this.isDir = isDir;
     }

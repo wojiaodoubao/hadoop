@@ -35,44 +35,45 @@ import java.util.List;
 import java.util.ArrayList;
 
 /**
- * A Job is a state machine consists of many procedures.
+ * A Job is a state machine consists of many procedures. The procedures are
+ * executed as a chain. Each procedure need to specify the next procedure. If
+ * there is no next procedure then the jos is finished.
  */
-public class BalanceJob<T extends BalanceProcedure> implements Writable {
+public final class BalanceJob<T extends BalanceProcedure> implements Writable {
   private String id;
   private BalanceProcedureScheduler scheduler;
   private volatile boolean jobDone = false;
   private Exception error;
-  public static final Logger LOG = LoggerFactory.getLogger(BalanceJob.class.getName());
+  public static final Logger LOG =
+      LoggerFactory.getLogger(BalanceJob.class.getName());
   private Map<String, T> procedureTable = new HashMap<>();
   private T firstProcedure;
   private T curProcedure;
   private T lastProcedure;
   private boolean removeAfterDone = true;
 
-  public static String NEXT_PROCEDURE_NONE = "NONE";
-  static Set<String> RESERVED_NAME = new HashSet<>();
+  static final String NEXT_PROCEDURE_NONE = "NONE";
+  private static Set<String> reservedNames = new HashSet<>();
 
   static {
-    RESERVED_NAME.add(NEXT_PROCEDURE_NONE);
+    reservedNames.add(NEXT_PROCEDURE_NONE);
   }
 
   public static class Builder<T extends BalanceProcedure> {
 
-    List<T> procedures = new ArrayList<>();
-    boolean removeAfterDone = false;
+    private List<T> procedures = new ArrayList<>();
+    private boolean removeAfterDone = false;
 
-    public Builder addProcedure(T procedure) {
-      procedures.add(procedure);
-      return this;
-    }
-
+    /**
+     * Append a procedure to the tail.
+     */
     public Builder nextProcedure(T procedure) {
       if (procedures.size() > 0) {
         procedures.get(procedures.size() - 1)
             .setNextProcedure(procedure.name());
       }
       procedure.setNextProcedure(NEXT_PROCEDURE_NONE);
-      addProcedure(procedure);
+      procedures.add(procedure);
       return this;
     }
 
@@ -80,8 +81,8 @@ public class BalanceJob<T extends BalanceProcedure> implements Writable {
      * Automatically remove this job from the scheduler cache when the job is
      * done.
      */
-    public Builder removeAfterDone(boolean removeAfterDone) {
-      this.removeAfterDone = removeAfterDone;
+    public Builder removeAfterDone(boolean remove) {
+      removeAfterDone = remove;
       return this;
     }
 
@@ -96,13 +97,12 @@ public class BalanceJob<T extends BalanceProcedure> implements Writable {
 
   private BalanceJob() {}
 
-  private BalanceJob(Iterable<T> procedures, boolean remove) throws IOException {
+  private BalanceJob(Iterable<T> procedures, boolean remove)
+      throws IOException {
     for (T p : procedures) {
       String taskName = p.name();
-      for (String rname : RESERVED_NAME) {
-        if (rname.equals(taskName)) {
-          throw new IOException(rname + " is reserved.");
-        }
+      if (reservedNames.contains(taskName)) {
+        throw new IOException(taskName + " is reserved.");
       }
       procedureTable.put(p.name(), p);
       if (firstProcedure == null) {
@@ -118,11 +118,13 @@ public class BalanceJob<T extends BalanceProcedure> implements Writable {
    * Run the state machine.
    */
   public void execute() {
-    while (!jobDone && scheduler.isRunning()) {
-      if (curProcedure == null) {
-        finish(null);
-      } else {
-        try {
+    boolean quit = false;
+    try {
+      while (!jobDone && scheduler.isRunning() && !quit) {
+        if (curProcedure == null) { // Job done.
+          finish(null);
+          quit = true;
+        } else {
           if (curProcedure == firstProcedure || lastProcedure != curProcedure) {
             LOG.info("Start procedure {}. The last procedure is {}",
                 curProcedure.name(),
@@ -132,22 +134,19 @@ public class BalanceJob<T extends BalanceProcedure> implements Writable {
             lastProcedure = curProcedure;
             curProcedure = next();
           }
-        } catch (BalanceProcedure.RetryException tre) {
-          scheduler.delay(this, curProcedure.delayMillisBeforeRetry());
-          return;
-        } catch (Exception e) {
-          finish(e);// This job is failed.
-          return;
-        } catch (Throwable t) {
-          finish(new IOException("Got throwable error.", t));
-          return;
-        }
-        if (scheduler.writeJournal(this)) {
-          continue;
-        } else {
-          return;// write journal failed. The job is added to the recoverQueue.
+          if (!scheduler.writeJournal(this)) {
+            quit = true; // Write journal failed. Simply quit because this job
+                         // has already been added to the recoverQueue.
+          }
         }
       }
+    } catch (BalanceProcedure.RetryException tre) {
+      scheduler.delay(this, curProcedure.delayMillisBeforeRetry());
+    } catch (Exception e) {
+      finish(e);
+    } catch (Throwable t) {
+      IOException error = new IOException("Got throwable error.", t);
+      finish(error);
     }
   }
 
@@ -207,6 +206,9 @@ public class BalanceJob<T extends BalanceProcedure> implements Writable {
     return jobDone;
   }
 
+  /**
+   * Wait until the job is done.
+   */
   public synchronized void waitJobDone() throws InterruptedException {
     while (!jobDone) {
       wait();
@@ -223,6 +225,9 @@ public class BalanceJob<T extends BalanceProcedure> implements Writable {
 
   @Override
   public void write(DataOutput out) throws IOException {
+    if (id == null) {
+      throw new IOException("BalanceJob with id=null can not be serialized.");
+    }
     Text.writeString(out, id);
     int taskTableSize = procedureTable == null ? 0 : procedureTable.size();
     out.writeInt(taskTableSize);
@@ -293,8 +298,8 @@ public class BalanceJob<T extends BalanceProcedure> implements Writable {
       if (procedureTable.size() != ojob.procedureTable.size()) {
         return false;
       }
-      for (String key : procedureTable.keySet()) {
-        if (!procedureTable.get(key).equals(ojob.procedureTable.get(key))) {
+      for (Map.Entry<String, T> e : procedureTable.entrySet()) {
+        if (!e.getValue().equals(ojob.procedureTable.get(e.getKey()))) {
           return false;
         }
       }
@@ -304,15 +309,24 @@ public class BalanceJob<T extends BalanceProcedure> implements Writable {
   }
 
   @Override
+  public int hashCode() {
+    int hashCode = procedureTable.hashCode();
+    if (id != null) {
+      hashCode += id.hashCode();
+    }
+    return hashCode;
+  }
+
+  @Override
   public String toString() {
     StringBuilder builder = new StringBuilder();
-    builder.append("id=" + id);
+    builder.append("id=").append(id);
     if (firstProcedure != null) {
-      builder.append(" firstProcedure=" + firstProcedure.name());
+      builder.append(" firstProcedure=").append(firstProcedure.name());
     }
-    builder.append(" jobDone=" + jobDone);
+    builder.append(" jobDone=").append(jobDone);
     if (error != null) {
-      builder.append(" error=" + error.getMessage());
+      builder.append(" error=").append(error.getMessage());
     }
     return builder.toString();
   }

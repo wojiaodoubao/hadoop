@@ -20,7 +20,7 @@ package org.apache.hadoop.tools;
 import org.apache.hadoop.conf.Configured;
 
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.server.federation.MountTableProcedure;
+import org.apache.hadoop.hdfs.server.federation.procedure.MountTableProcedure;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
 import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
 import org.apache.hadoop.hdfs.server.federation.router.RouterClient;
@@ -73,8 +73,9 @@ public class DistCpFedBalance extends Configured implements Tool {
       }
       FedBalanceContext context = new FedBalanceContext(src, dst, getConf());
 
-      BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(getConf());
-      scheduler.init();
+      BalanceProcedureScheduler scheduler =
+          new BalanceProcedureScheduler(getConf());
+      scheduler.init(false);
       try {
         DistCpProcedure dcp =
             new DistCpProcedure("distcp-procedure", null, 1000, context);
@@ -94,8 +95,9 @@ public class DistCpFedBalance extends Configured implements Tool {
         return -1;
       }
     } else if (command.equals("continue")) {
-      BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(getConf());
-      scheduler.init();
+      BalanceProcedureScheduler scheduler =
+          new BalanceProcedureScheduler(getConf());
+      scheduler.init(true);
       while (true) {
         Collection<BalanceJob> jobs = scheduler.getAllJobs();
         for (BalanceJob job : jobs) {

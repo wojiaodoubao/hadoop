@@ -15,10 +15,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.federation;
+package org.apache.hadoop.hdfs.server.federation.procedure;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ha.HAServiceProtocol;
+import org.apache.hadoop.hdfs.server.federation.RouterConfigBuilder;
+import org.apache.hadoop.hdfs.server.federation.StateStoreDFSCluster;
 import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
 import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
@@ -37,14 +39,20 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster.RouterContext;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutput;
+import java.io.DataInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.DataOutputStream;
 import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.List;
 
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.createNamenodeReport;
 import static org.apache.hadoop.hdfs.server.federation.store.FederationStateStoreTestUtils.synchronizeRecords;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 public class TestMountTableProcedure {
 
@@ -72,10 +80,10 @@ public class TestMountTableProcedure {
 
     // Add two name services for testing
     ActiveNamenodeResolver membership = router.getNamenodeResolver();
-    membership.registerNamenode(
-        createNamenodeReport("ns0", "nn1", HAServiceProtocol.HAServiceState.ACTIVE));
-    membership.registerNamenode(
-        createNamenodeReport("ns1", "nn1", HAServiceProtocol.HAServiceState.ACTIVE));
+    membership.registerNamenode(createNamenodeReport("ns0", "nn1",
+        HAServiceProtocol.HAServiceState.ACTIVE));
+    membership.registerNamenode(createNamenodeReport("ns1", "nn1",
+        HAServiceProtocol.HAServiceState.ACTIVE));
     stateStore.refreshCaches(true);
 
     routerConf = new Configuration();
@@ -115,7 +123,7 @@ public class TestMountTableProcedure {
     // verify the mount entry is added successfully.
     GetMountTableEntriesRequest request =
         GetMountTableEntriesRequest.newInstance("/");
-    stateStore.loadCache(MountTableStoreImpl.class, true);// load cache.
+    stateStore.loadCache(MountTableStoreImpl.class, true); // load cache.
     GetMountTableEntriesResponse response =
         mountTable.getMountTableEntries(request);
     assertEquals(3, response.getEntries().size());
@@ -126,7 +134,7 @@ public class TestMountTableProcedure {
         new MountTableProcedure("single-mount-table-procedure", null,
             1000, fedPath, dst, dstNs, routerConf);
     assertTrue(smtp.execute(null));
-    stateStore.loadCache(MountTableStoreImpl.class, true);// load cache.
+    stateStore.loadCache(MountTableStoreImpl.class, true); // load cache.
     // verify the mount entry is updated to /
     MountTable entry =
         MountTableProcedure.getMountEntry(fedPath, mountTable);

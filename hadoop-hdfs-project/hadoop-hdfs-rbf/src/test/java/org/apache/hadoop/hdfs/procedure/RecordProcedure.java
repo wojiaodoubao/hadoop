@@ -21,11 +21,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * This procedure records all the finished procedures.
+ * This procedure records all the finished procedures. This is used for test.
  */
 public class RecordProcedure extends BalanceProcedure<RecordProcedure> {
 
-  static List<RecordProcedure> finish = new ArrayList<>();
+  private static List<RecordProcedure> finish = new ArrayList<>();
 
   public RecordProcedure() {}
 
@@ -37,5 +37,9 @@ public class RecordProcedure extends BalanceProcedure<RecordProcedure> {
   public boolean execute(RecordProcedure lastProcedure) throws RetryException {
     finish.add(this);
     return true;
+  }
+
+  public static List<RecordProcedure> getFinishList() {
+    return finish;
   }
 }

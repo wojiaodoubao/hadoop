@@ -15,22 +15,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.procedure;
 
-import org.apache.hadoop.classification.InterfaceAudience;
 
 /**
- * This class contains constants for configuration keys and default values
- * used in hdfs procedure.
+ * FedBalance is a tool for balancing data across federation clusters.
  */
-@InterfaceAudience.Private
-public interface BalanceProcedureConfigKeys {
-  /* The worker threads number of the BalanceProcedureScheduler */
-  String WORK_THREAD_NUM = "hadoop.hdfs.procedure.work.thread.num";
-  int WORK_THREAD_NUM_DEFAULT = 10;
-  /* The uri of the journal */
-  String SCHEDULER_JOURNAL_URI = "hadoop.hdfs.procedure.scheduler.journal.uri";
-  String JOB_PREFIX = "JOB-";
-  String TMP_TAIL = ".tmp";
-  String JOURNAL_CLASS = "hadoop.hdfs.procedure.journal.class";
-}
+@InterfaceAudience.Public
+package org.apache.hadoop.tools;
+import org.apache.hadoop.classification.InterfaceAudience;
