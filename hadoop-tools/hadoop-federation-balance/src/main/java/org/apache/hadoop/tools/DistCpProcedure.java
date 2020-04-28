@@ -235,7 +235,7 @@ public class DistCpProcedure extends BalanceProcedure {
     if (job != null) {
       // the distcp has been submitted.
       if (job.isComplete()) {
-        jobId = null;// unset jobId because the job is done.
+        jobId = null; // unset jobId because the job is done.
         if (job.isSuccessful()) {
           // restore permission.
           dstFs.removeAcl(context.getDst());

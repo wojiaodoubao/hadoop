@@ -145,8 +145,8 @@ public final class BalanceJob<T extends BalanceProcedure> implements Writable {
     } catch (Exception e) {
       finish(e);
     } catch (Throwable t) {
-      IOException error = new IOException("Got throwable error.", t);
-      finish(error);
+      IOException err = new IOException("Got throwable error.", t);
+      finish(err);
     }
   }
 
@@ -229,7 +229,7 @@ public final class BalanceJob<T extends BalanceProcedure> implements Writable {
       throw new IOException("BalanceJob with id=null can not be serialized.");
     }
     Text.writeString(out, id);
-    int taskTableSize = procedureTable == null ? 0 : procedureTable.size();
+    int taskTableSize = procedureTable.size();
     out.writeInt(taskTableSize);
     for (T p : procedureTable.values()) {
       Text.writeString(out, p.getClass().getName());

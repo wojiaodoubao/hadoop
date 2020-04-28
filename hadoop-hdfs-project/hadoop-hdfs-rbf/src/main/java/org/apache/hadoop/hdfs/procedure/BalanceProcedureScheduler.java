@@ -21,7 +21,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Ints;
 
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -385,7 +384,7 @@ public class BalanceProcedureScheduler {
   /**
    * Wrap the delayed BalanceJob.
    */
-  private class DelayWrapper implements Delayed {
+  private static class DelayWrapper implements Delayed {
     private BalanceJob job;
     private long time;
 
@@ -410,6 +409,15 @@ public class BalanceProcedureScheduler {
     @Override
     public int compareTo(Delayed o) {
       return Ints.saturatedCast(this.time - ((DelayWrapper) o).time);
+    }
+
+    @Override
+    public int hashCode() {
+      int hasCode = (int) time;
+      if (job != null) {
+        hasCode += job.hashCode();
+      }
+      return hasCode;
     }
 
     @Override

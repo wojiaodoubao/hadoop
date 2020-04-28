@@ -24,13 +24,18 @@ import org.apache.hadoop.classification.InterfaceAudience;
  * used in hdfs procedure.
  */
 @InterfaceAudience.Private
-public interface BalanceProcedureConfigKeys {
+public final class BalanceProcedureConfigKeys {
   /* The worker threads number of the BalanceProcedureScheduler */
-  String WORK_THREAD_NUM = "hadoop.hdfs.procedure.work.thread.num";
-  int WORK_THREAD_NUM_DEFAULT = 10;
+  public static final String WORK_THREAD_NUM =
+      "hadoop.hdfs.procedure.work.thread.num";
+  public static final int WORK_THREAD_NUM_DEFAULT = 10;
   /* The uri of the journal */
-  String SCHEDULER_JOURNAL_URI = "hadoop.hdfs.procedure.scheduler.journal.uri";
-  String JOB_PREFIX = "JOB-";
-  String TMP_TAIL = ".tmp";
-  String JOURNAL_CLASS = "hadoop.hdfs.procedure.journal.class";
+  public static final String SCHEDULER_JOURNAL_URI =
+      "hadoop.hdfs.procedure.scheduler.journal.uri";
+  public static final String JOB_PREFIX = "JOB-";
+  public static final String TMP_TAIL = ".tmp";
+  public static final String JOURNAL_CLASS =
+      "hadoop.hdfs.procedure.journal.class";
+
+  private BalanceProcedureConfigKeys() {}
 }
