@@ -61,10 +61,15 @@ public class DistCpFedBalance extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     if (args == null || args.length < 1) {
       System.out.println(USAGE);
+      return -1;
     }
     int index = 0;
     String command = args[index++];
     if (command.equals("submit")) {
+      if (args.length < 3) {
+        System.out.println(USAGE);
+        return -1;
+      }
       String fedPath = args[index++];
       Path src = getSrcPath(fedPath);
       Path dst = new Path(args[index++]);

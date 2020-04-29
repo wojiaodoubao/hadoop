@@ -30,13 +30,13 @@ import static org.apache.hadoop.tools.FedBalanceConfigs.FEDERATION_BALANCE_CLASS
  */
 public class FedBalance {
 
-  private void execute(String[] args) throws Exception {
+  private int execute(String[] args) throws Exception {
     Configuration conf = new HdfsConfiguration();
     Class<Tool> balanceClazz = (Class<Tool>) conf
         .getClass(FEDERATION_BALANCE_CLASS, DistCpFedBalance.class);
     Tool balancer = ReflectionUtils.newInstance(balanceClazz, conf);
     int res = ToolRunner.run(balancer, args);
-    System.exit(res);
+    return res;
   }
 
   public static void main(String[] args) throws Exception {
