@@ -17,6 +17,11 @@
  */
 package org.apache.hadoop.hdfs.procedure;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.Text;
+
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
@@ -28,22 +33,30 @@ public class MultiPhaseProcedure extends BalanceProcedure {
 
   private int totalPhase;
   private int currentPhase = 0;
-  private static int counter = 0;
+  private Configuration conf;
+  private FileSystem fs;
+  private Path path;
 
   public MultiPhaseProcedure() {}
 
-  public MultiPhaseProcedure(String name, long delay, int totalPhase) {
+  public MultiPhaseProcedure(String name, long delay, int totalPhase,
+      Configuration config, String spath) throws IOException {
     super(name, delay);
     this.totalPhase = totalPhase;
+    this.conf = config;
+    this.path = new Path(spath);
+    this.fs = path.getFileSystem(config);
   }
 
   @Override
-  public boolean execute(BalanceProcedure lastProcedure)
-      throws RetryException, IOException {
+  public boolean execute(BalanceProcedure lastProcedure) throws IOException {
     if (currentPhase < totalPhase) {
       LOG.info("phase {}", currentPhase);
+      Path phase = new Path(path, "phase-" + currentPhase);
+      if (!fs.exists(phase)) {
+        fs.mkdirs(phase);
+      }
       currentPhase++;
-      counter++;
       try {
         Thread.sleep(100);
       } catch (InterruptedException e) {
@@ -58,6 +71,8 @@ public class MultiPhaseProcedure extends BalanceProcedure {
     super.write(out);
     out.writeInt(totalPhase);
     out.writeInt(currentPhase);
+    conf.write(out);
+    Text.writeString(out, path.toString());
   }
 
   @Override
@@ -65,13 +80,9 @@ public class MultiPhaseProcedure extends BalanceProcedure {
     super.readFields(in);
     totalPhase = in.readInt();
     currentPhase = in.readInt();
-  }
-
-  public static int getCounter() {
-    return counter;
-  }
-
-  public static void setCounter(int counter) {
-    MultiPhaseProcedure.counter = counter;
+    conf = new Configuration(false);
+    conf.readFields(in);
+    path = new Path(Text.readString(in));
+    fs = path.getFileSystem(conf);
   }
 }

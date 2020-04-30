@@ -45,9 +45,13 @@ import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.WORK_T
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
 import static org.mockito.ArgumentMatchers.any;
 
+/**
+ * Test BalanceProcedureScheduler.
+ */
 public class TestBalanceProcedureScheduler {
 
   private static MiniDFSCluster cluster;
@@ -250,16 +254,16 @@ public class TestBalanceProcedureScheduler {
   /**
    * Test scheduler crashes and recovers.
    */
-  @Test(timeout = 5000)
+  @Test(timeout = 15000)
   public void testSchedulerDownAndRecoverJob() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init(true);
-
+    Path parent = new Path("/testSchedulerDownAndRecoverJob");
     try {
       // construct job
       BalanceJob.Builder builder = new BalanceJob.Builder<>();
       MultiPhaseProcedure multiPhaseProcedure =
-          new MultiPhaseProcedure("retry", 1000, 10);
+          new MultiPhaseProcedure("retry", 1000, 10, CONF, parent.toString());
       builder.nextProcedure(multiPhaseProcedure);
       BalanceJob job = builder.build();
 
@@ -267,17 +271,22 @@ public class TestBalanceProcedureScheduler {
       Thread.sleep(500); // wait procedure to be scheduled.
       scheduler.shutDownAndWait(2);
 
-      int before = MultiPhaseProcedure.getCounter();
-      MultiPhaseProcedure.setCounter(0);
-      assertTrue(before > 0 && before < 10);
-
+      assertFalse(job.isJobDone());
+      int len = fs.listStatus(parent).length;
+      assertTrue(len > 0 && len < 10);
       // restart scheduler, test recovering the job.
       scheduler = new BalanceProcedureScheduler(CONF);
       scheduler.init(true);
       scheduler.waitUntilDone(job);
-      int after = MultiPhaseProcedure.getCounter();
-      assertEquals(10, after + before);
+
+      assertEquals(10, fs.listStatus(parent).length);
+      for (int i = 0; i < 10; i++) {
+        assertTrue(fs.exists(new Path(parent, "phase-" + i)));
+      }
     } finally {
+      if (fs.exists(parent)) {
+        fs.delete(parent, true);
+      }
       scheduler.shutDownAndWait(2);
     }
   }
