@@ -27,6 +27,7 @@ import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Time;
 import org.junit.BeforeClass;
+import org.junit.AfterClass;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -79,10 +80,17 @@ public class TestBalanceProcedureScheduler {
     fs.mkdirs(new Path(workPath));
   }
 
+  @AfterClass
+  public static void close() {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+
   /**
    * Test the scheduler could be shutdown correctly.
    */
-  @Test(timeout = 30000)
+  @Test(timeout = 60000)
   public void testShutdownScheduler() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init(true);
@@ -103,7 +111,7 @@ public class TestBalanceProcedureScheduler {
   /**
    * Test a successful job.
    */
-  @Test(timeout = 30000)
+  @Test(timeout = 60000)
   public void testSuccessfulJob() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init(true);
@@ -134,7 +142,7 @@ public class TestBalanceProcedureScheduler {
   /**
    * Test a job fails and the error can be got.
    */
-  @Test
+  @Test(timeout = 60000)
   public void testFailedJob() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init(true);
@@ -157,7 +165,7 @@ public class TestBalanceProcedureScheduler {
   /**
    * Test recover a job.
    */
-  @Test
+  @Test(timeout = 60000)
   public void testGetJobAfterRecover() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init(true);
@@ -187,7 +195,7 @@ public class TestBalanceProcedureScheduler {
   /**
    * Test RetryException is handled correctly.
    */
-  @Test(timeout = 5000)
+  @Test(timeout = 60000)
   public void testRetry() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init(true);
@@ -214,7 +222,7 @@ public class TestBalanceProcedureScheduler {
   /**
    * Test schedule an empty job.
    */
-  @Test(timeout = 5000)
+  @Test(timeout = 60000)
   public void testEmptyJob() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init(true);
@@ -230,7 +238,7 @@ public class TestBalanceProcedureScheduler {
   /**
    * Test serialization and deserialization of Job.
    */
-  @Test(timeout = 5000)
+  @Test(timeout = 60000)
   public void testJobSerializeAndDeserialize() throws Exception {
     BalanceJob.Builder builder = new BalanceJob.Builder<RecordProcedure>();
     for (int i = 0; i < 5; i++) {
@@ -254,7 +262,7 @@ public class TestBalanceProcedureScheduler {
   /**
    * Test scheduler crashes and recovers.
    */
-  @Test(timeout = 15000)
+  @Test(timeout = 60000)
   public void testSchedulerDownAndRecoverJob() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init(true);
@@ -291,7 +299,7 @@ public class TestBalanceProcedureScheduler {
     }
   }
 
-  @Test(timeout = 5000)
+  @Test(timeout = 60000)
   public void testRecoverJobFromJournal() throws Exception {
     BalanceJournal journal =
         ReflectionUtils.newInstance(HDFSJournal.class, CONF);
@@ -318,7 +326,7 @@ public class TestBalanceProcedureScheduler {
     }
   }
 
-  @Test(timeout = 5000)
+  @Test(timeout = 60000)
   public void testClearJournalFail() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init(true);
@@ -348,7 +356,7 @@ public class TestBalanceProcedureScheduler {
   /**
    * Test the job will be recovered if writing journal fails.
    */
-  @Test(timeout = 30000)
+  @Test(timeout = 60000)
   public void testJobRecoveryWhenWriteJournalFail() throws Exception {
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(CONF);
     scheduler.init(true);
