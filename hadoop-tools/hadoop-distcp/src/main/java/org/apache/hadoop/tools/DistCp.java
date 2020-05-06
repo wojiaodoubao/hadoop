@@ -46,6 +46,8 @@ import org.apache.hadoop.util.ToolRunner;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import static org.apache.hadoop.tools.DistCpConstants.CONF_LABEL_TOTAL_NUMBER_OF_RECORDS;
+
 /**
  * DistCp is the main driver-class for DistCpV2.
  * For command-line use, DistCp::main() orchestrates the parsing of command-line
@@ -80,13 +82,19 @@ public class DistCp extends Configured implements Tool {
   private boolean submitted;
   private FileSystem jobFS;
 
-  private void prepareFileListing(Job job) throws Exception {
+  /**
+   * Prepare the input copy listing file.
+   * @return number of paths in the copy list
+   */
+  private int prepareFileListing(Job job) throws Exception {
     if (context.shouldUseSnapshotDiff()) {
       // When "-diff" or "-rdiff" is passed, do sync() first, then
       // create copyListing based on snapshot diff.
       DistCpSync distCpSync = new DistCpSync(context, job.getConfiguration());
       if (distCpSync.sync()) {
         createInputFileListingWithDiff(job, distCpSync);
+        return job.getConfiguration()
+            .getInt(CONF_LABEL_TOTAL_NUMBER_OF_RECORDS, 0);
       } else {
         throw new Exception("DistCp sync failed, input options: " + context);
       }
@@ -94,6 +102,8 @@ public class DistCp extends Configured implements Tool {
       // When no "-diff" or "-rdiff" is passed, create copyListing
       // in regular way.
       createInputFileListing(job);
+      return job.getConfiguration()
+          .getInt(CONF_LABEL_TOTAL_NUMBER_OF_RECORDS, 0);
     }
   }
 
@@ -194,6 +204,7 @@ public class DistCp extends Configured implements Tool {
   public Job createAndSubmitJob() throws Exception {
     assert context != null;
     assert getConf() != null;
+    boolean cleanup = false;
     Job job = null;
     try {
       synchronized(this) {
@@ -202,19 +213,26 @@ public class DistCp extends Configured implements Tool {
         jobFS = metaFolder.getFileSystem(getConf());
         job = createJob();
       }
-      prepareFileListing(job);
-      job.submit();
-      submitted = true;
+      int splitNum = prepareFileListing(job);
+      if (splitNum > 0) {
+        job.submit();
+        submitted = true;
+      } else {
+        LOG.info("There is nothing to copy. No job will be submitted.");
+      }
+      cleanup = true;
     } finally {
-      if (!submitted) {
+      if (cleanup) {
         cleanup();
       }
     }
 
-    String jobID = job.getJobID().toString();
-    job.getConfiguration().set(DistCpConstants.CONF_LABEL_DISTCP_JOB_ID,
-        jobID);
-    LOG.info("DistCp job-id: " + jobID);
+    if (submitted) {
+      String jobID = job.getJobID().toString();
+      job.getConfiguration()
+          .set(DistCpConstants.CONF_LABEL_DISTCP_JOB_ID, jobID);
+      LOG.info("DistCp job-id: " + jobID);
+    }
 
     return job;
   }
