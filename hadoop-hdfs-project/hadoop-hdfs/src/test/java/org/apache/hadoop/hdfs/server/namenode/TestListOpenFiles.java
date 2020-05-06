@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.namenode;
 
+import static org.apache.hadoop.test.LambdaTestUtils.intercept;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -31,6 +32,7 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.hadoop.fs.InvalidPathException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -293,6 +295,21 @@ public class TestListOpenFiles {
     while (openFiles.size() > 0) {
       DFSTestUtil.closeOpenFiles(openFiles, 1);
       verifyOpenFiles(openFiles, OpenFilesIterator.FILTER_PATH_DEFAULT);
+    }
+  }
+
+  @Test
+  public void testListOpenFilesWithInvalidPath() throws Exception {
+    HashMap<Path, FSDataOutputStream> openFiles = new HashMap<>();
+    openFiles.putAll(
+        DFSTestUtil.createOpenFiles(fs, new Path("/base"), "open-1", 1));
+    verifyOpenFiles(openFiles, EnumSet.of(OpenFilesType.ALL_OPEN_FILES), "/base");
+    intercept(InvalidPathException.class, "Invalid path",
+        "Expect InvalidPathException", () -> verifyOpenFiles(new HashMap<>(),
+            EnumSet.of(OpenFilesType.ALL_OPEN_FILES), "hdfs://cluster/base"));
+    while(openFiles.size() > 0) {
+      DFSTestUtil.closeOpenFiles(openFiles, 1);
+      verifyOpenFiles(openFiles);
     }
   }
 }
