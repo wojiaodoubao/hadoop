@@ -303,7 +303,8 @@ public class TestListOpenFiles {
     HashMap<Path, FSDataOutputStream> openFiles = new HashMap<>();
     openFiles.putAll(
         DFSTestUtil.createOpenFiles(fs, new Path("/base"), "open-1", 1));
-    verifyOpenFiles(openFiles, EnumSet.of(OpenFilesType.ALL_OPEN_FILES), "/base");
+    verifyOpenFiles(openFiles, EnumSet.of(OpenFilesType.ALL_OPEN_FILES),
+        "/base");
     intercept(InvalidPathException.class, "Invalid path",
         "Expect InvalidPathException", () -> verifyOpenFiles(new HashMap<>(),
             EnumSet.of(OpenFilesType.ALL_OPEN_FILES), "hdfs://cluster/base"));
