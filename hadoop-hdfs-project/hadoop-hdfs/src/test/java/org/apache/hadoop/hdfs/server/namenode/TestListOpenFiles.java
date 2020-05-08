@@ -299,18 +299,27 @@ public class TestListOpenFiles {
   }
 
   @Test
-  public void testListOpenFilesWithInvalidPath() throws Exception {
+  public void testListOpenFilesWithInvalidPathServerSide() throws Exception {
     HashMap<Path, FSDataOutputStream> openFiles = new HashMap<>();
     openFiles.putAll(
         DFSTestUtil.createOpenFiles(fs, new Path("/base"), "open-1", 1));
     verifyOpenFiles(openFiles, EnumSet.of(OpenFilesType.ALL_OPEN_FILES),
         "/base");
-    intercept(InvalidPathException.class, "Invalid path",
+    intercept(AssertionError.class, "Absolute path required",
         "Expect InvalidPathException", () -> verifyOpenFiles(new HashMap<>(),
             EnumSet.of(OpenFilesType.ALL_OPEN_FILES), "hdfs://cluster/base"));
     while(openFiles.size() > 0) {
       DFSTestUtil.closeOpenFiles(openFiles, 1);
       verifyOpenFiles(openFiles);
     }
+  }
+
+  @Test
+  public void testListOpenFilesWithInvalidPathClientSide() throws Exception {
+    intercept(IllegalArgumentException.class, "Wrong FS",
+        "Expect IllegalArgumentException", () -> fs
+            .listOpenFiles(EnumSet.of(OpenFilesType.ALL_OPEN_FILES),
+                "hdfs://non-cluster/"));
+    fs.listOpenFiles(EnumSet.of(OpenFilesType.ALL_OPEN_FILES), "/path");
   }
 }

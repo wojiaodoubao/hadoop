@@ -1922,8 +1922,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    */
   BatchedListEntries<OpenFileEntry> listOpenFiles(long prevId,
       EnumSet<OpenFilesType> openFilesTypes, String path) throws IOException {
-    if (!DFSUtil.isValidName(path)) {
-      throw new InvalidPathException("Invalid path: " + path);
+    if (!INode.isValidAbsolutePath(path)) {
+      throw new AssertionError(
+          "Absolute path required, but got '" + path + "'");
     }
     final String operationName = "listOpenFiles";
     checkSuperuserPrivilege();
