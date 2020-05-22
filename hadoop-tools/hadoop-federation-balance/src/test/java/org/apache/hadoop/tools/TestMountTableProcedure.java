@@ -1,11 +1,26 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.hadoop.tools;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ha.HAServiceProtocol;
-import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster;
 import org.apache.hadoop.hdfs.server.federation.RouterConfigBuilder;
 import org.apache.hadoop.hdfs.server.federation.StateStoreDFSCluster;
-import org.apache.hadoop.hdfs.server.federation.procedure.MountTableProcedure;
 import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
 import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
@@ -22,20 +37,27 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster.RouterContext;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutput;
+import java.io.DataInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.DataOutputStream;
 import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.List;
 
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.createNamenodeReport;
 import static org.apache.hadoop.hdfs.server.federation.store.FederationStateStoreTestUtils.synchronizeRecords;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
-public class TestMountTableP {
+public class TestMountTableProcedure {
+
   private static StateStoreDFSCluster cluster;
-  private static MiniRouterDFSCluster.RouterContext routerContext;
+  private static RouterContext routerContext;
   private static Configuration routerConf;
   private static List<MountTable> mockMountTable;
   private static StateStoreService stateStore;
@@ -138,8 +160,8 @@ public class TestMountTableP {
     smtp = new MountTableProcedure();
     smtp.readFields(
         new DataInputStream(new ByteArrayInputStream(bao.toByteArray())));
-//    assertEquals(fedPath, smtp.getFedPath());
-//    assertEquals(dst, smtp.getDstPath());
-//    assertEquals(dstNs, smtp.getDstNs());
+    assertEquals(fedPath, smtp.getFedPath());
+    assertEquals(dst, smtp.getDstPath());
+    assertEquals(dstNs, smtp.getDstNs());
   }
 }
