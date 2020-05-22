@@ -127,10 +127,10 @@ public class TestDistCpProcedure {
     scheduler.submit(balanceJob);
     scheduler.waitUntilDone(balanceJob);
     assertTrue(balanceJob.isJobDone());
-    if (balanceJob.error() != null) {
-      throw balanceJob.error();
+    if (balanceJob.getError() != null) {
+      throw balanceJob.getError();
     }
-    assertNull(balanceJob.error());
+    assertNull(balanceJob.getError());
     assertTrue(fs.exists(dst));
     assertFalse(fs.exists(new Path(context.getSrc(), ".snapshot")));
     assertFalse(fs.exists(new Path(context.getDst(), ".snapshot")));
@@ -282,7 +282,7 @@ public class TestDistCpProcedure {
     intercept(RemoteException.class, "LeaseExpiredException",
         "Expect RemoteException(LeaseExpiredException).", () -> out.close());
     dcp[0] = seDe(dcp[0]);
-    assertTrue(dcp[0].execute(null));
+    assertTrue(dcp[0].execute());
     assertTrue(fs.exists(dst));
     assertFalse(fs.exists(new Path(context.getSrc(), ".snapshot")));
     assertFalse(fs.exists(new Path(context.getDst(), ".snapshot")));

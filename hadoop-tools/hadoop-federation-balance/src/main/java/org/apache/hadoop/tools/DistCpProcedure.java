@@ -120,8 +120,7 @@ public class DistCpProcedure extends BalanceProcedure {
   }
 
   @Override
-  public boolean execute(BalanceProcedure lastProcedure)
-      throws RetryException, IOException {
+  public boolean execute() throws RetryException, IOException {
     LOG.info("Stage={}", stage.name());
     switch (stage) {
     case PRE_CHECK:

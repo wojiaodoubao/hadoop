@@ -75,8 +75,7 @@ public class MountTableProcedure extends BalanceProcedure {
   }
 
   @Override
-  public boolean execute(BalanceProcedure lastProcedure)
-      throws RetryException, IOException {
+  public boolean execute() throws RetryException, IOException {
     updateMountTable();
     return true;
   }

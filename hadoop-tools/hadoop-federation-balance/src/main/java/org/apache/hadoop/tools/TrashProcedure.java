@@ -58,7 +58,7 @@ public class TrashProcedure extends BalanceProcedure {
   }
 
   @Override
-  public boolean execute(BalanceProcedure lastProcedure) throws IOException {
+  public boolean execute() throws IOException {
     moveToTrash();
     return true;
   }
