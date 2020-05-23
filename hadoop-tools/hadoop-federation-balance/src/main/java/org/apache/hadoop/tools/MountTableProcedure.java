@@ -49,26 +49,25 @@ import java.util.List;
  */
 public class MountTableProcedure extends BalanceProcedure {
 
-  private String fedPath;
+  private String mount;
   private String dstPath;
   private String dstNs;
   private Configuration conf;
-  private RouterClient rClient;
 
   public MountTableProcedure() {}
 
   /**
-   * Update mount entry fedPath to specified dst uri.
+   * Update mount entry to specified dst uri.
    *
-   * @param fedPath the federation path to be updated.
+   * @param mount the mount entry to be updated.
    * @param dstPath the sub-cluster uri of the dst path.
    * @param conf the configuration.
    */
   public MountTableProcedure(String name, String nextProcedure,
-      long delayDuration, String fedPath, String dstPath, String dstNs,
-      Configuration conf) {
+      long delayDuration, String mount, String dstPath, String dstNs,
+      Configuration conf) throws IOException {
     super(name, nextProcedure, delayDuration);
-    this.fedPath = fedPath;
+    this.mount = mount;
     this.dstPath = dstPath;
     this.dstNs = dstNs;
     this.conf = conf;
@@ -81,29 +80,47 @@ public class MountTableProcedure extends BalanceProcedure {
   }
 
   private void updateMountTable() throws IOException {
-    String address = conf.getTrimmed(
-        RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_KEY,
+    updateMountTableDestination(mount, dstNs, dstPath, conf);
+    enableWrite(mount, conf);
+  }
+
+  /**
+   * Update the destination of the mount point to target namespace and target
+   * path.
+   *
+   * @param mount   the mount point.
+   * @param dstNs   the target namespace.
+   * @param dstPath the target path
+   * @param conf    the configuration of the router.
+   */
+  private static void updateMountTableDestination(String mount, String dstNs,
+      String dstPath, Configuration conf) throws IOException {
+    String address = conf.getTrimmed(RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_KEY,
         RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_DEFAULT);
     InetSocketAddress routerSocket = NetUtils.createSocketAddr(address);
-    rClient = new RouterClient(routerSocket, conf);
-    MountTableManager mountTable = rClient.getMountTableManager();
+    RouterClient rClient = new RouterClient(routerSocket, conf);
+    try {
+      MountTableManager mountTable = rClient.getMountTableManager();
 
-    MountTable originalEntry = getMountEntry(fedPath, mountTable);
-    if (originalEntry == null) {
-      throw new IOException("Mount table " + fedPath + " doesn't exist");
-    } else {
-      RemoteLocation remoteLocation =
-          new RemoteLocation(dstNs, dstPath, fedPath);
-      originalEntry.setDestinations(Arrays.asList(remoteLocation));
-      UpdateMountTableEntryRequest updateRequest =
-          UpdateMountTableEntryRequest.newInstance(originalEntry);
-      UpdateMountTableEntryResponse response =
-          mountTable.updateMountTableEntry(updateRequest);
-      if (!response.getStatus()) {
-        throw new IOException("Failed update mount table " + fedPath);
+      MountTable originalEntry = getMountEntry(mount, mountTable);
+      if (originalEntry == null) {
+        throw new IOException("Mount table " + mount + " doesn't exist");
+      } else {
+        RemoteLocation remoteLocation =
+            new RemoteLocation(dstNs, dstPath, mount);
+        originalEntry.setDestinations(Arrays.asList(remoteLocation));
+        UpdateMountTableEntryRequest updateRequest =
+            UpdateMountTableEntryRequest.newInstance(originalEntry);
+        UpdateMountTableEntryResponse response =
+            mountTable.updateMountTableEntry(updateRequest);
+        if (!response.getStatus()) {
+          throw new IOException("Failed update mount table " + mount);
+        }
+        rClient.getMountTableManager().refreshMountTableEntries(
+            RefreshMountTableEntriesRequest.newInstance());
       }
-      rClient.getMountTableManager().refreshMountTableEntries(
-          RefreshMountTableEntriesRequest.newInstance());
+    } finally {
+      rClient.close();
     }
   }
 
@@ -131,10 +148,69 @@ public class MountTableProcedure extends BalanceProcedure {
     return existingEntry;
   }
 
+  /**
+   * Disable write by making the mount point readonly.
+   *
+   * @param mount the mount point to set readonly.
+   * @param conf  the configuration of the router.
+   */
+  static void disableWrite(String mount, Configuration conf)
+      throws IOException {
+    setMountReadOnly(mount, true, conf);
+  }
+
+  /**
+   * Enable write by cancelling the mount point readonly.
+   *
+   * @param mount the mount point to cancel readonly.
+   * @param conf  the configuration of the router.
+   */
+  static void enableWrite(String mount, Configuration conf) throws IOException {
+    setMountReadOnly(mount, false, conf);
+  }
+
+  /**
+   * Enable or disable readonly of the mount point.
+   *
+   * @param mount    the mount point.
+   * @param readOnly enable or disable readonly.
+   * @param conf     the configuration of the router.
+   */
+  private static void setMountReadOnly(String mount, boolean readOnly,
+      Configuration conf) throws IOException {
+    String address = conf.getTrimmed(RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_KEY,
+        RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_DEFAULT);
+    InetSocketAddress routerSocket = NetUtils.createSocketAddr(address);
+    RouterClient rClient = new RouterClient(routerSocket, conf);
+    try {
+      MountTableManager mountTable = rClient.getMountTableManager();
+
+      MountTable originalEntry = getMountEntry(mount, mountTable);
+      if (originalEntry == null) {
+        throw new IOException("Mount table " + mount + " doesn't exist");
+      } else {
+        originalEntry.setReadOnly(readOnly);
+        UpdateMountTableEntryRequest updateRequest =
+            UpdateMountTableEntryRequest.newInstance(originalEntry);
+        UpdateMountTableEntryResponse response =
+            mountTable.updateMountTableEntry(updateRequest);
+        if (!response.getStatus()) {
+          throw new IOException(
+              "Failed update mount table " + mount + " with readonly="
+                  + readOnly);
+        }
+        rClient.getMountTableManager().refreshMountTableEntries(
+            RefreshMountTableEntriesRequest.newInstance());
+      }
+    } finally {
+      rClient.close();
+    }
+  }
+
   @Override
   public void write(DataOutput out) throws IOException {
     super.write(out);
-    Text.writeString(out, fedPath);
+    Text.writeString(out, mount);
     Text.writeString(out, dstPath);
     Text.writeString(out, dstNs);
     conf.write(out);
@@ -143,7 +219,7 @@ public class MountTableProcedure extends BalanceProcedure {
   @Override
   public void readFields(DataInput in) throws IOException {
     super.readFields(in);
-    fedPath = Text.readString(in);
+    mount = Text.readString(in);
     dstPath = Text.readString(in);
     dstNs = Text.readString(in);
     conf = new Configuration(false);
@@ -151,8 +227,8 @@ public class MountTableProcedure extends BalanceProcedure {
   }
 
   @VisibleForTesting
-  String getFedPath() {
-    return fedPath;
+  String getMount() {
+    return mount;
   }
 
   @VisibleForTesting

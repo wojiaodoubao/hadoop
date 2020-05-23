@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,7 +18,6 @@
 package org.apache.hadoop.tools;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -64,15 +63,14 @@ public class TestDistCpProcedure {
   private static MiniDFSCluster cluster;
   private static MiniMRYarnCluster mrCluster;
   private static Configuration conf;
+  static final String MOUNT = "mock_mount_point";
   private static final String SRCDAT = "srcdat";
   private static final String DSTDAT = "dstdat";
   private static final long BLOCK_SIZE = 1024;
-  private FileEntry[] srcfiles = {
-      new FileEntry(SRCDAT, true),
-      new FileEntry(SRCDAT + "/a", false),
-      new FileEntry(SRCDAT + "/b", true),
-      new FileEntry(SRCDAT + "/b/c", false)
-  };
+  private FileEntry[] srcfiles =
+      {new FileEntry(SRCDAT, true), new FileEntry(SRCDAT + "/a", false),
+          new FileEntry(SRCDAT + "/b", true),
+          new FileEntry(SRCDAT + "/b/c", false)};
   private static String nnUri;
 
   @BeforeClass
@@ -107,16 +105,20 @@ public class TestDistCpProcedure {
     }
   }
 
-  @Test(timeout = 30000)
-  public void testSuccessfulDistCpProcedure() throws Exception {
+  @Test(timeout = 60000)
+  public void testSuccessfulDistCpProcedure()
+      throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
-    DistributedFileSystem fs = (DistributedFileSystem)
-        FileSystem.get(URI.create(nnUri), conf);
+    DistributedFileSystem fs =
+        (DistributedFileSystem) FileSystem.get(URI.create(nnUri), conf);
     createFiles(fs, testRoot, srcfiles, -1);
 
     Path src = new Path(testRoot, SRCDAT);
     Path dst = new Path(testRoot, DSTDAT);
-    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
+    FsPermission originalPerm = new FsPermission(777);
+    fs.setPermission(src, originalPerm);
+    FedBalanceContext context =
+        new FedBalanceContext(src, dst, MOUNT, conf, false, false);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(conf);
@@ -134,13 +136,15 @@ public class TestDistCpProcedure {
     assertTrue(fs.exists(dst));
     assertFalse(fs.exists(new Path(context.getSrc(), ".snapshot")));
     assertFalse(fs.exists(new Path(context.getDst(), ".snapshot")));
+    assertEquals(originalPerm, fs.getFileStatus(dst).getPermission());
+    assertEquals(0, fs.getFileStatus(src).getPermission().toShort());
   }
 
   @Test(timeout = 30000)
   public void testInitDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
-    DistributedFileSystem fs = (DistributedFileSystem)
-        FileSystem.get(URI.create(nnUri), conf);
+    DistributedFileSystem fs =
+        (DistributedFileSystem) FileSystem.get(URI.create(nnUri), conf);
     createFiles(fs, testRoot, srcfiles, -1);
 
     Path src = new Path(testRoot, SRCDAT);
@@ -148,7 +152,8 @@ public class TestDistCpProcedure {
     // set permission.
     fs.setPermission(src, FsPermission.createImmutable((short) 020));
 
-    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
+    FedBalanceContext context =
+        new FedBalanceContext(src, dst, MOUNT, conf, false, false);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
 
@@ -169,13 +174,14 @@ public class TestDistCpProcedure {
   @Test(timeout = 120000)
   public void testDiffDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
-    DistributedFileSystem fs = (DistributedFileSystem)
-        FileSystem.get(URI.create(nnUri), conf);
+    DistributedFileSystem fs =
+        (DistributedFileSystem) FileSystem.get(URI.create(nnUri), conf);
     createFiles(fs, testRoot, srcfiles, -1);
     Path src = new Path(testRoot, SRCDAT);
     Path dst = new Path(testRoot, DSTDAT);
 
-    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
+    FedBalanceContext context =
+        new FedBalanceContext(src, dst, MOUNT, conf, false, false);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     executeProcedure(dcProcedure, Stage.DIFF_DISTCP,
@@ -187,12 +193,12 @@ public class TestDistCpProcedure {
     executeProcedure(dcProcedure, Stage.FINISH,
         () -> dcProcedure.finalDistCp());
     assertFalse(fs.exists(new Path(dst, "a")));
-    // move back file a and test distcp.
+    // move back file src/a and test distcp.
     fs.rename(new Path("/a"), new Path(src, "a"));
     executeProcedure(dcProcedure, Stage.FINISH,
         () -> dcProcedure.finalDistCp());
     assertTrue(fs.exists(new Path(dst, "a")));
-    // append file a and test.
+    // append file src/a and test.
     OutputStream out = fs.append(new Path(src, "a"));
     out.write("hello".getBytes());
     out.close();
@@ -202,31 +208,27 @@ public class TestDistCpProcedure {
     assertEquals(len, fs.getFileStatus(new Path(dst, "a")).getLen());
   }
 
-  @Test(timeout = 60000)
+  @Test(timeout = 120000)
   public void testStageFinalDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
-    DistributedFileSystem fs = (DistributedFileSystem)
-        FileSystem.get(URI.create(nnUri), conf);
+    DistributedFileSystem fs =
+        (DistributedFileSystem) FileSystem.get(URI.create(nnUri), conf);
     createFiles(fs, testRoot, srcfiles, -1);
 
     Path src = new Path(testRoot, SRCDAT);
     Path dst = new Path(testRoot, DSTDAT);
-    // set permission.
-    fs.setPermission(src, FsPermission.createImmutable((short) 020));
     // open files.
     OutputStream out = fs.append(new Path(src, "a"));
 
-    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
+    FedBalanceContext context =
+        new FedBalanceContext(src, dst, MOUNT, conf, false, false);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     executeProcedure(dcProcedure, Stage.DIFF_DISTCP,
         () -> dcProcedure.initDistCp());
     executeProcedure(dcProcedure, Stage.FINISH,
         () -> dcProcedure.finalDistCp());
-    FileStatus srcStatus = fs.getFileStatus(src);
-    assertEquals(0, srcStatus.getPermission().toShort());
-    FileStatus dstStatus = fs.getFileStatus(dst);
-    assertEquals(020, dstStatus.getPermission().toShort());
+    // Verify all the open files have been closed.
     intercept(RemoteException.class, "LeaseExpiredException",
         "Expect RemoteException(LeaseExpiredException).", () -> out.close());
   }
@@ -234,8 +236,8 @@ public class TestDistCpProcedure {
   @Test(timeout = 10000)
   public void testStageFinish() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
-    DistributedFileSystem fs = (DistributedFileSystem)
-        FileSystem.get(URI.create(nnUri), conf);
+    DistributedFileSystem fs =
+        (DistributedFileSystem) FileSystem.get(URI.create(nnUri), conf);
     Path src = new Path(testRoot, SRCDAT);
     Path dst = new Path(testRoot, DSTDAT);
     fs.mkdirs(src);
@@ -245,37 +247,50 @@ public class TestDistCpProcedure {
     fs.createSnapshot(src, LAST_SNAPSHOT_NAME);
     fs.createSnapshot(src, CURRENT_SNAPSHOT_NAME);
     fs.createSnapshot(dst, LAST_SNAPSHOT_NAME);
+    FsPermission originalPerm = new FsPermission(777);
+    fs.setPermission(src, originalPerm);
 
-    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
+    // Test the finish stage.
+    FedBalanceContext context =
+        new FedBalanceContext(src, dst, MOUNT, conf, false, false);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
+    dcProcedure.disableWrite();
     dcProcedure.finish();
 
+    // Verify path and permission.
     assertTrue(fs.exists(dst));
     assertFalse(fs.exists(new Path(src, ".snapshot")));
     assertFalse(fs.exists(new Path(dst, ".snapshot")));
+    assertEquals(originalPerm, fs.getFileStatus(dst).getPermission());
+    assertEquals(0, fs.getFileStatus(src).getPermission().toShort());
   }
 
-  @Test(timeout = 60000)
+  @Test
   public void testRecoveryByStage() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
-    DistributedFileSystem fs = (DistributedFileSystem)
-        FileSystem.get(URI.create(nnUri), conf);
+    DistributedFileSystem fs =
+        (DistributedFileSystem) FileSystem.get(URI.create(nnUri), conf);
     createFiles(fs, testRoot, srcfiles, -1);
 
     Path src = new Path(testRoot, SRCDAT);
     Path dst = new Path(testRoot, DSTDAT);
-    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
+    FedBalanceContext context =
+        new FedBalanceContext(src, dst, MOUNT, conf, false, false);
     final DistCpProcedure[] dcp = new DistCpProcedure[1];
     dcp[0] = new DistCpProcedure("distcp-procedure", null, 1000, context);
 
+    // Doing serialization and deserialization before each stage to monitor the
+    // recovery.
     dcp[0] = seDe(dcp[0]);
     executeProcedure(dcp[0], Stage.INIT_DISTCP, () -> dcp[0].preCheck());
     dcp[0] = seDe(dcp[0]);
     executeProcedure(dcp[0], Stage.DIFF_DISTCP, () -> dcp[0].initDistCp());
-    fs.delete(new Path(src, "a"), true);
+    fs.delete(new Path(src, "a"), true); // make some difference.
     dcp[0] = seDe(dcp[0]);
-    executeProcedure(dcp[0], Stage.FINISH, () -> dcp[0].diffDistCp());
+    executeProcedure(dcp[0], Stage.DISABLE_WRITE, () -> dcp[0].diffDistCp());
+    dcp[0] = seDe(dcp[0]);
+    executeProcedure(dcp[0], Stage.FINAL_DISTCP, () -> dcp[0].disableWrite());
     dcp[0] = seDe(dcp[0]);
     OutputStream out = fs.append(new Path(src, "b/c"));
     executeProcedure(dcp[0], Stage.FINISH, () -> dcp[0].finalDistCp());
@@ -291,13 +306,14 @@ public class TestDistCpProcedure {
   @Test(timeout = 30000)
   public void testShutdown() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
-    DistributedFileSystem fs = (DistributedFileSystem)
-        FileSystem.get(URI.create(nnUri), conf);
+    DistributedFileSystem fs =
+        (DistributedFileSystem) FileSystem.get(URI.create(nnUri), conf);
     createFiles(fs, testRoot, srcfiles, -1);
 
     Path src = new Path(testRoot, SRCDAT);
     Path dst = new Path(testRoot, DSTDAT);
-    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
+    FedBalanceContext context =
+        new FedBalanceContext(src, dst, MOUNT, conf, false, false);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(conf);
@@ -358,19 +374,19 @@ public class TestDistCpProcedure {
       if (entry.isDirectory()) {
         fs.mkdirs(newPath);
       } else {
-        long fileSize = BLOCK_SIZE *100;
+        long fileSize = BLOCK_SIZE * 100;
         int bufSize = 128;
         if (chunkSize == -1) {
-          DFSTestUtil.createFile(fs, newPath, bufSize,
-              fileSize, BLOCK_SIZE, replicationFactor, seed);
+          DFSTestUtil.createFile(fs, newPath, bufSize, fileSize, BLOCK_SIZE,
+              replicationFactor, seed);
         } else {
           // Create a variable length block file, by creating
           // one block of half block size at the chunk boundary
           long seg1 = chunkSize * BLOCK_SIZE - BLOCK_SIZE / 2;
           long seg2 = fileSize - seg1;
-          DFSTestUtil.createFile(fs, newPath, bufSize,
-              seg1, BLOCK_SIZE, replicationFactor, seed);
-          DFSTestUtil.appendFileNewBlock(fs, newPath, (int)seg2);
+          DFSTestUtil.createFile(fs, newPath, bufSize, seg1, BLOCK_SIZE,
+              replicationFactor, seed);
+          DFSTestUtil.appendFileNewBlock(fs, newPath, (int) seg2);
         }
       }
       seed = System.currentTimeMillis() + rand.nextLong();

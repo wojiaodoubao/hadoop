@@ -64,7 +64,9 @@ public class TestTrashProcedure {
     fs.mkdirs(new Path(src, "dir"));
     assertTrue(fs.exists(src));
 
-    FedBalanceContext context = new FedBalanceContext(src, dst, conf);
+    FedBalanceContext context =
+        new FedBalanceContext(src, dst, TestDistCpProcedure.MOUNT, conf, false,
+            false);
     TrashProcedure trashProcedure =
         new TrashProcedure("trash-procedure", null, 1000, context);
     trashProcedure.moveToTrash();

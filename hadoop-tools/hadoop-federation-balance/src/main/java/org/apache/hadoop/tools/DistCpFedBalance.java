@@ -20,7 +20,7 @@ package org.apache.hadoop.tools;
 import org.apache.hadoop.conf.Configured;
 
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.server.federation.procedure.MountTableProcedure;
+import org.apache.hadoop.hdfs.procedure.BalanceProcedure;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
 import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
 import org.apache.hadoop.hdfs.server.federation.router.RouterClient;
@@ -34,7 +34,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 
@@ -50,8 +49,11 @@ public class DistCpFedBalance extends Configured implements Tool {
   public static final Logger LOG =
       LoggerFactory.getLogger(DistCpFedBalance.class);
   private static final String USAGE = "usage: fedbalance:\n"
-            + "\t[submit <source_mount_point> <target_path>]\n"
-            + "\t[continue]";
+      + "\t[submit [OPTIONS] <mount_point|source_path> <target_path>]\n"
+      + "\t\tOPTIONS is none or any of:\n"
+      + "\t\t-router [true|false]\n"
+      + "\t\t-forceCloseOpen [true|false]\n"
+      + "\t[continue]";
 
   public DistCpFedBalance() {
     super();
@@ -66,61 +68,138 @@ public class DistCpFedBalance extends Configured implements Tool {
     int index = 0;
     String command = args[index++];
     if (command.equals("submit")) {
-      if (args.length < 3) {
-        System.out.println(USAGE);
-        return -1;
-      }
-      String fedPath = args[index++];
-      Path src = getSrcPath(fedPath);
-      Path dst = new Path(args[index++]);
-      if (dst.toUri().getAuthority() == null) {
-        throw new IOException("The destination cluster must be specified.");
-      }
-      FedBalanceContext context = new FedBalanceContext(src, dst, getConf());
-
-      BalanceProcedureScheduler scheduler =
-          new BalanceProcedureScheduler(getConf());
-      scheduler.init(false);
-      try {
-        DistCpProcedure dcp =
-            new DistCpProcedure("distcp-procedure", null, 1000, context);
-        MountTableProcedure smtp =
-            new MountTableProcedure("single-mount-table-procedure", null,
-                1000, fedPath, dst.toUri().getPath(),
-                dst.toUri().getAuthority(), getConf());
-        TrashProcedure tp =
-            new TrashProcedure("trash-procedure", null, 1000, context);
-        BalanceJob balanceJob =
-            new BalanceJob.Builder<>().nextProcedure(dcp).nextProcedure(smtp)
-                .nextProcedure(tp).build();
-        scheduler.submit(balanceJob);
-        scheduler.waitUntilDone(balanceJob);
-      } catch (IOException e) {
-        LOG.error("Balance job failed.", e);
-        return -1;
-      }
+      return submit(args, index);
     } else if (command.equals("continue")) {
-      BalanceProcedureScheduler scheduler =
-          new BalanceProcedureScheduler(getConf());
+      return continueJob();
+    } else {
+      System.out.println(USAGE);
+      return -1;
+    }
+  }
+
+  /**
+   * Recover and continue the unfinished jobs.
+   */
+  private int continueJob() throws InterruptedException {
+    BalanceProcedureScheduler scheduler =
+        new BalanceProcedureScheduler(getConf());
+    try {
       scheduler.init(true);
       while (true) {
         Collection<BalanceJob> jobs = scheduler.getAllJobs();
+        int unfinished = 0;
         for (BalanceJob job : jobs) {
+          if (!job.isJobDone()) {
+            unfinished++;
+          }
           System.out.println(job);
         }
-        Thread.sleep(TimeUnit.MINUTES.toMillis(10));
+        if (unfinished == 0) {
+          break;
+        }
+        Thread.sleep(TimeUnit.SECONDS.toMillis(10));
       }
-    } else {
-      System.out.println(USAGE);
+    } catch (IOException e) {
+      LOG.error("Continue balance job failed.", e);
+      return -1;
+    } finally {
+      scheduler.shutDown();
     }
     return 0;
   }
 
   /**
+   * Start a ProcedureScheduler and submit the job.
+   */
+  private int submit(String[] args, int index) throws IOException {
+    if (args.length < 3) {
+      System.out.println(USAGE);
+      return -1;
+    }
+    // parse options.
+    boolean routerCluster = true;
+    boolean forceCloseOpen = false;
+    while (args[index].startsWith("-")) {
+      String option = args[index++];
+      if (option.equals("-router")) {
+        routerCluster = args[index++].equalsIgnoreCase("true");
+      } else if (option.equals("-forceCloseOpen")) {
+        forceCloseOpen = args[index++].equalsIgnoreCase("true");
+      } else {
+        System.out.println(USAGE);
+        return -1;
+      }
+    }
+    String inputSrc = args[index++];
+    String inputDst = args[index++];
+
+    // Submit the job.
+    BalanceProcedureScheduler scheduler =
+        new BalanceProcedureScheduler(getConf());
+    scheduler.init(false);
+    try {
+      BalanceJob balanceJob =
+          constructBalanceJob(inputSrc, inputDst, routerCluster, forceCloseOpen);
+      // Submit and wait until the job is done.
+      scheduler.submit(balanceJob);
+      scheduler.waitUntilDone(balanceJob);
+    } catch (IOException e) {
+      LOG.error("Submit balance job failed.", e);
+      return -1;
+    } finally {
+      scheduler.shutDown();
+    }
+    return 0;
+  }
+
+  /**
+   * Construct the balance job.
+   */
+  private BalanceJob constructBalanceJob(String inputSrc, String inputDst,
+      boolean routerCluster, boolean forceCloseOpen) throws IOException {
+    // Construct job context.
+    FedBalanceContext context;
+    Path dst = new Path(inputDst);
+    if (dst.toUri().getAuthority() == null) {
+      throw new IOException("The destination cluster must be specified.");
+    }
+    if (routerCluster) {
+      Path src = getSrcPath(inputSrc);
+      String mount = inputSrc;
+      context =
+          new FedBalanceContext(src, dst, mount, getConf(), forceCloseOpen,
+              routerCluster);
+    } else {
+      Path src = new Path(inputSrc);
+      if (src.toUri().getAuthority() == null) {
+        throw new IOException("The source cluster must be specified.");
+      }
+      context =
+          new FedBalanceContext(src, dst, "no-mount", getConf(), forceCloseOpen,
+              routerCluster);
+    }
+
+    // Construct the balance job.
+    BalanceJob.Builder<BalanceProcedure> builder = new BalanceJob.Builder<>();
+    DistCpProcedure dcp =
+        new DistCpProcedure("distcp-procedure", null, 1000, context);
+    builder.nextProcedure(dcp);
+    if (routerCluster) {
+      MountTableProcedure mtp =
+          new MountTableProcedure("mount-table-procedure", null, 1000, inputSrc,
+              dst.toUri().getPath(), dst.toUri().getAuthority(), getConf());
+      builder.nextProcedure(mtp);
+    }
+    TrashProcedure tp =
+        new TrashProcedure("trash-procedure", null, 1000, context);
+    builder.nextProcedure(tp);
+    return builder.build();
+  }
+
+  /**
    * Get src uri from Router.
    */
-  private Path getSrcPath(String fedPath) throws IOException,
-      URISyntaxException {
+  private Path getSrcPath(String fedPath) throws IOException {
     String address = getConf().getTrimmed(
         RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_KEY,
         RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_DEFAULT);

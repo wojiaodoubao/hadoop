@@ -31,6 +31,7 @@ import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.hdfs.protocol.proto.AclProtos;
 import org.apache.hadoop.hdfs.protocolPB.PBHelperClient;
 import org.apache.hadoop.hdfs.procedure.BalanceProcedure;
+import org.apache.hadoop.hdfs.tools.federation.RouterAdmin;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobID;
@@ -53,7 +54,6 @@ import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_MAP_NUM
 import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_MAP_NUM_DEFAULT;
 import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_BAND_WIDTH_LIMIT;
 import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_BAND_WIDTH_LIMIT_DEFAULT;
-import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_FORCE_CLOSE_OPEN_FILES;
 import static org.apache.hadoop.tools.FedBalanceConfigs.CURRENT_SNAPSHOT_NAME;
 import static org.apache.hadoop.tools.FedBalanceConfigs.LAST_SNAPSHOT_NAME;
 
@@ -64,7 +64,8 @@ import static org.apache.hadoop.tools.FedBalanceConfigs.LAST_SNAPSHOT_NAME;
  * INIT_DISTCP             :the first round of distcp.
  * DIFF_DISTCP             :copy snapshot diff round by round until there is
  *                          no diff.
- * FINAL_DISTCP(optional)  :close all open files and do the final round distcp.
+ * DISABLE_WRITE           :disable write operations.
+ * FINAL_DISTCP            :close all open files and do the final round distcp.
  * FINISH                  :procedure finish.
  */
 public class DistCpProcedure extends BalanceProcedure {
@@ -72,23 +73,31 @@ public class DistCpProcedure extends BalanceProcedure {
   public static final Logger LOG =
       LoggerFactory.getLogger(DistCpProcedure.class);
 
+  /* Stages of this procedure. */
   enum Stage {
-    PRE_CHECK, INIT_DISTCP, DIFF_DISTCP, FINAL_DISTCP, FINISH
+    PRE_CHECK, INIT_DISTCP, DIFF_DISTCP, DISABLE_WRITE, FINAL_DISTCP, FINISH
   }
 
-  private FedBalanceContext context;
+  private FedBalanceContext context; // the balance context.
+  private Path src; // the source path including the source cluster.
+  private Path dst; // the dst path including the dst cluster.
   private Configuration conf;
-  private int mapNum;
-  private int bandWidth;
-  private String jobId;
-  private Stage stage;
+  private int mapNum; // the number of map tasks.
+  private int bandWidth; // the bandwidth limit of each distcp task.
+  private String jobId; // the id of the current distcp.
+  private Stage stage; // current stage of this procedure.
+
+  /* Force close all open files when there is no diff between src and dst */
   private boolean forceCloseOpenFiles;
-  private FsPermission fPerm;
-  private AclStatus acl;
-  private boolean savePermission;
+  /* Disable write by setting the mount point readonly. */
+  private boolean useMountReadOnly;
+
+  private FsPermission fPerm; // the permission of the src.
+  private AclStatus acl; // the acl of the src.
+
   private JobClient client;
-  private DistributedFileSystem srcFs;
-  private DistributedFileSystem dstFs;
+  private DistributedFileSystem srcFs; // fs of the src cluster.
+  private DistributedFileSystem dstFs; // fs of the dst cluster.
 
   public DistCpProcedure() {
   }
@@ -105,6 +114,8 @@ public class DistCpProcedure extends BalanceProcedure {
       FedBalanceContext context) throws IOException {
     super(name, nextProcedure, delayDuration);
     this.context = context;
+    this.src = context.getSrc();
+    this.dst = context.getDst();
     this.conf = context.getConf();
     this.client = new JobClient(conf);
     this.stage = Stage.PRE_CHECK;
@@ -112,9 +123,8 @@ public class DistCpProcedure extends BalanceProcedure {
         conf.getInt(DISTCP_PROCEDURE_MAP_NUM, DISTCP_PROCEDURE_MAP_NUM_DEFAULT);
     this.bandWidth = conf.getInt(DISTCP_PROCEDURE_BAND_WIDTH_LIMIT,
         DISTCP_PROCEDURE_BAND_WIDTH_LIMIT_DEFAULT);
-    this.forceCloseOpenFiles =
-        conf.getBoolean(DISTCP_PROCEDURE_FORCE_CLOSE_OPEN_FILES, false);
-    this.savePermission = true;
+    this.forceCloseOpenFiles = context.getForceCloseOpenFiles();
+    this.useMountReadOnly = context.getUseMountReadOnly();
     srcFs = (DistributedFileSystem) context.getSrc().getFileSystem(conf);
     dstFs = (DistributedFileSystem) context.getDst().getFileSystem(conf);
   }
@@ -132,6 +142,9 @@ public class DistCpProcedure extends BalanceProcedure {
     case DIFF_DISTCP:
       diffDistCp();
       return false;
+    case DISABLE_WRITE:
+      disableWrite();
+      return false;
     case FINAL_DISTCP:
       finalDistCp();
       return false;
@@ -143,16 +156,19 @@ public class DistCpProcedure extends BalanceProcedure {
     }
   }
 
+  /**
+   * Pre check of src and dst.
+   */
   void preCheck() throws IOException {
-    FileStatus status = srcFs.getFileStatus(context.getSrc());
+    FileStatus status = srcFs.getFileStatus(src);
     if (!status.isDirectory()) {
-      throw new IOException(context.getSrc() + " doesn't exist.");
+      throw new IOException(src + " doesn't exist.");
     }
-    if (dstFs.exists(context.getDst())) {
-      throw new IOException(context.getDst() + " already exists.");
+    if (dstFs.exists(dst)) {
+      throw new IOException(dst + " already exists.");
     }
-    if (srcFs.exists(new Path(context.getSrc(), ".snapshot"))) {
-      throw new IOException(context.getSrc() + " shouldn't enable snapshot.");
+    if (srcFs.exists(new Path(src, ".snapshot"))) {
+      throw new IOException(src + " shouldn't enable snapshot.");
     }
     stage = Stage.INIT_DISTCP;
   }
@@ -177,10 +193,10 @@ public class DistCpProcedure extends BalanceProcedure {
       }
     } else {
       cleanUpBeforeInitDistcp();
-      srcFs.createSnapshot(context.getSrc(), CURRENT_SNAPSHOT_NAME);
+      srcFs.createSnapshot(src, CURRENT_SNAPSHOT_NAME);
       jobId = submitDistCpJob(
-          context.getSrc().toString() + "/.snapshot/" + CURRENT_SNAPSHOT_NAME,
-          context.getDst().toString(), false);
+          src.toString() + "/.snapshot/" + CURRENT_SNAPSHOT_NAME,
+          dst.toString(), false);
     }
   }
 
@@ -203,10 +219,8 @@ public class DistCpProcedure extends BalanceProcedure {
         throw new RetryException(); // wait job complete.
       }
     } else if (!verifyDiff()) {
-      if (!verifyOpenFiles()) {
-        stage = Stage.FINISH;
-      } else if (forceCloseOpenFiles) {
-        stage = Stage.FINAL_DISTCP;
+      if (!verifyOpenFiles() || forceCloseOpenFiles) {
+        stage = Stage.DISABLE_WRITE;
       } else {
         throw new RetryException();
       }
@@ -216,32 +230,50 @@ public class DistCpProcedure extends BalanceProcedure {
   }
 
   /**
+   * Disable write either by making the mount entry readonly or cancelling the x
+   * permission of the source path.
+   */
+  void disableWrite() throws IOException {
+    if (useMountReadOnly) {
+      String mount = context.getMount();
+      MountTableProcedure.disableWrite(mount, conf);
+    } else {
+      // Save and cancel permission.
+      FileStatus status = srcFs.getFileStatus(src);
+      fPerm = status.getPermission();
+      acl = srcFs.getAclStatus(src);
+      srcFs.setPermission(src, FsPermission.createImmutable((short) 0));
+    }
+    stage = Stage.FINAL_DISTCP;
+  }
+
+  /**
+   * Enable write by restoring the x permission.
+   */
+  void restorePermission() throws IOException {
+    // restore permission.
+    dstFs.removeAcl(dst);
+    if (acl != null) {
+      dstFs.modifyAclEntries(dst, acl.getEntries());
+    }
+    if (fPerm != null) {
+      dstFs.setPermission(dst, fPerm);
+    }
+  }
+
+  /**
    * Close all open files then submit the distcp with -diff.
    */
   void finalDistCp() throws IOException, RetryException {
-    // Cancel x permission, close all open files then do the final distcp.
-    if (savePermission) {
-      FileStatus status = srcFs.getFileStatus(context.getSrc());
-      fPerm = status.getPermission();
-      acl = srcFs.getAclStatus(context.getSrc());
-      srcFs.setPermission(context.getSrc(),
-          FsPermission.createImmutable((short) 0));
-      savePermission = false;
-    }
-    closeAllOpenFiles(srcFs, context.getSrc());
-    // final distcp.
+    // Close all open files then do the final distcp.
+    closeAllOpenFiles(srcFs, src);
+    // Final distcp.
     RunningJob job = getCurrentJob();
     if (job != null) {
       // the distcp has been submitted.
       if (job.isComplete()) {
         jobId = null; // unset jobId because the job is done.
         if (job.isSuccessful()) {
-          // restore permission.
-          dstFs.removeAcl(context.getDst());
-          if (acl != null) {
-            dstFs.modifyAclEntries(context.getDst(), acl.getEntries());
-          }
-          dstFs.setPermission(context.getDst(), fPerm);
           stage = Stage.FINISH;
           return;
         } else {
@@ -257,11 +289,14 @@ public class DistCpProcedure extends BalanceProcedure {
   }
 
   void finish() throws IOException {
-    if (srcFs.exists(context.getSrc())) {
-      cleanupSnapshot(srcFs, context.getSrc());
+    if (!useMountReadOnly) {
+      restorePermission();
     }
-    if (dstFs.exists(context.getDst())) {
-      cleanupSnapshot(dstFs, context.getDst());
+    if (srcFs.exists(src)) {
+      cleanupSnapshot(srcFs, src);
+    }
+    if (dstFs.exists(dst)) {
+      cleanupSnapshot(dstFs, dst);
     }
   }
 
@@ -276,15 +311,13 @@ public class DistCpProcedure extends BalanceProcedure {
   }
 
   private void submitDiffDistCp() throws IOException {
-    enableSnapshot(dstFs, context.getDst());
-    deleteSnapshot(srcFs, context.getSrc(), LAST_SNAPSHOT_NAME);
-    deleteSnapshot(dstFs, context.getDst(), LAST_SNAPSHOT_NAME);
-    dstFs.createSnapshot(context.getDst(), LAST_SNAPSHOT_NAME);
-    srcFs.renameSnapshot(context.getSrc(), CURRENT_SNAPSHOT_NAME,
-        LAST_SNAPSHOT_NAME);
-    srcFs.createSnapshot(context.getSrc(), CURRENT_SNAPSHOT_NAME);
-    jobId = submitDistCpJob(context.getSrc().toString(),
-        context.getDst().toString(), true);
+    enableSnapshot(dstFs, dst);
+    deleteSnapshot(srcFs, src, LAST_SNAPSHOT_NAME);
+    deleteSnapshot(dstFs, dst, LAST_SNAPSHOT_NAME);
+    dstFs.createSnapshot(dst, LAST_SNAPSHOT_NAME);
+    srcFs.renameSnapshot(src, CURRENT_SNAPSHOT_NAME, LAST_SNAPSHOT_NAME);
+    srcFs.createSnapshot(src, CURRENT_SNAPSHOT_NAME);
+    jobId = submitDistCpJob(src.toString(), dst.toString(), true);
   }
 
   /**
@@ -316,8 +349,8 @@ public class DistCpProcedure extends BalanceProcedure {
    * @return true if the src has changed.
    */
   private boolean verifyDiff() throws IOException {
-    SnapshotDiffReport diffReport = srcFs
-        .getSnapshotDiffReport(context.getSrc(), CURRENT_SNAPSHOT_NAME, "");
+    SnapshotDiffReport diffReport =
+        srcFs.getSnapshotDiffReport(src, CURRENT_SNAPSHOT_NAME, "");
     return diffReport.getDiffList().size() > 0;
   }
 
@@ -329,7 +362,7 @@ public class DistCpProcedure extends BalanceProcedure {
   private boolean verifyOpenFiles() throws IOException {
     RemoteIterator<OpenFileEntry> iterator = srcFs
         .listOpenFiles(EnumSet.of(OpenFilesType.ALL_OPEN_FILES),
-            context.getSrc().toString());
+            src.toString());
     return iterator.hasNext();
   }
 
@@ -341,13 +374,12 @@ public class DistCpProcedure extends BalanceProcedure {
   }
 
   private void cleanUpBeforeInitDistcp() throws IOException {
-    if (dstFs.exists(context.getDst())) { // clean up.
-      dstFs.delete(context.getDst(), true);
+    if (dstFs.exists(dst)) { // clean up.
+      dstFs.delete(dst, true);
     }
-    srcFs.allowSnapshot(context.getSrc());
-    if (srcFs.exists(
-        new Path(context.getSrc(), ".snapshot/" + CURRENT_SNAPSHOT_NAME))) {
-      srcFs.deleteSnapshot(context.getSrc(), CURRENT_SNAPSHOT_NAME);
+    srcFs.allowSnapshot(src);
+    if (srcFs.exists(new Path(src, ".snapshot/" + CURRENT_SNAPSHOT_NAME))) {
+      srcFs.deleteSnapshot(src, CURRENT_SNAPSHOT_NAME);
     }
   }
 
@@ -411,7 +443,6 @@ public class DistCpProcedure extends BalanceProcedure {
       out.writeInt(data.length);
       out.write(data);
     }
-    out.writeBoolean(savePermission);
   }
 
   @Override
@@ -419,6 +450,8 @@ public class DistCpProcedure extends BalanceProcedure {
     super.readFields(in);
     context = new FedBalanceContext();
     context.readFields(in);
+    src = context.getSrc();
+    dst = context.getDst();
     conf = context.getConf();
     if (in.readBoolean()) {
       jobId = Text.readString(in);
@@ -436,15 +469,14 @@ public class DistCpProcedure extends BalanceProcedure {
           AclProtos.GetAclStatusResponseProto.parseDelimitedFrom(bin);
       acl = PBHelperClient.convert(proto);
     }
-    savePermission = in.readBoolean();
     srcFs = (DistributedFileSystem) context.getSrc().getFileSystem(conf);
     dstFs = (DistributedFileSystem) context.getDst().getFileSystem(conf);
     mapNum =
         conf.getInt(DISTCP_PROCEDURE_MAP_NUM, DISTCP_PROCEDURE_MAP_NUM_DEFAULT);
     bandWidth = conf.getInt(DISTCP_PROCEDURE_BAND_WIDTH_LIMIT,
         DISTCP_PROCEDURE_BAND_WIDTH_LIMIT_DEFAULT);
-    forceCloseOpenFiles =
-        conf.getBoolean(DISTCP_PROCEDURE_FORCE_CLOSE_OPEN_FILES, false);
+    forceCloseOpenFiles = context.getForceCloseOpenFiles();
+    useMountReadOnly = context.getUseMountReadOnly();
     this.client = new JobClient(conf);
   }
 

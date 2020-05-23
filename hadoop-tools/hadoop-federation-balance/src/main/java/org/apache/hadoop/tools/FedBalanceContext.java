@@ -35,6 +35,13 @@ public class FedBalanceContext implements Writable {
   private Path src;
   /* the target path in the target sub-cluster */
   private Path dst;
+  /* the mount point to be balanced */
+  private String mount;
+  /* Force close all open files when there is no diff between src and dst */
+  private boolean forceCloseOpenFiles;
+  /* Disable write by setting the mount point readonly. */
+  private boolean useMountReadOnly;
+
   private Configuration conf;
 
   public FedBalanceContext() {}
@@ -44,12 +51,19 @@ public class FedBalanceContext implements Writable {
    *
    * @param src the source path in the source sub-cluster.
    * @param dst the target path in the target sub-cluster.
+   * @param mount the mount point to be balanced.
    * @param conf the configuration.
+   * @param forceCloseOpenFiles force close open files.
+   * @param useMountReadOnly use mount point readonly to disable write.
    */
-  public FedBalanceContext(Path src, Path dst, Configuration conf) {
+  public FedBalanceContext(Path src, Path dst, String mount, Configuration conf,
+      boolean forceCloseOpenFiles, boolean useMountReadOnly) {
     this.src = src;
     this.dst = dst;
+    this.mount = mount;
     this.conf = conf;
+    this.forceCloseOpenFiles = forceCloseOpenFiles;
+    this.useMountReadOnly = useMountReadOnly;
   }
 
   public Configuration getConf() {
@@ -64,11 +78,26 @@ public class FedBalanceContext implements Writable {
     return dst;
   }
 
+  public String getMount() {
+    return mount;
+  }
+
+  public boolean getForceCloseOpenFiles() {
+    return forceCloseOpenFiles;
+  }
+
+  public boolean getUseMountReadOnly() {
+    return useMountReadOnly;
+  }
+
   @Override
   public void write(DataOutput out) throws IOException {
     conf.write(out);
     Text.writeString(out, src.toString());
     Text.writeString(out, dst.toString());
+    Text.writeString(out, mount);
+    out.writeBoolean(forceCloseOpenFiles);
+    out.writeBoolean(useMountReadOnly);
   }
 
   @Override
@@ -77,5 +106,8 @@ public class FedBalanceContext implements Writable {
     conf.readFields(in);
     src = new Path(Text.readString(in));
     dst = new Path(Text.readString(in));
+    mount = Text.readString(in);
+    forceCloseOpenFiles = in.readBoolean();
+    useMountReadOnly = in.readBoolean();
   }
 }
