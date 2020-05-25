@@ -105,7 +105,7 @@ public class TestDistCpProcedure {
     }
   }
 
-  @Test(timeout = 60000)
+  @Test(timeout = 180000)
   public void testSuccessfulDistCpProcedure()
       throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
@@ -140,7 +140,7 @@ public class TestDistCpProcedure {
     assertEquals(0, fs.getFileStatus(src).getPermission().toShort());
   }
 
-  @Test(timeout = 30000)
+  @Test(timeout = 180000)
   public void testInitDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -171,7 +171,7 @@ public class TestDistCpProcedure {
     assertTrue(fs.exists(new Path(dst, "a")));
   }
 
-  @Test(timeout = 120000)
+  @Test(timeout = 180000)
   public void testDiffDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -208,7 +208,7 @@ public class TestDistCpProcedure {
     assertEquals(len, fs.getFileStatus(new Path(dst, "a")).getLen());
   }
 
-  @Test(timeout = 120000)
+  @Test(timeout = 180000)
   public void testStageFinalDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -233,7 +233,7 @@ public class TestDistCpProcedure {
         "Expect RemoteException(LeaseExpiredException).", () -> out.close());
   }
 
-  @Test(timeout = 10000)
+  @Test(timeout = 60000)
   public void testStageFinish() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -266,7 +266,7 @@ public class TestDistCpProcedure {
     assertEquals(0, fs.getFileStatus(src).getPermission().toShort());
   }
 
-  @Test
+  @Test(timeout = 180000)
   public void testRecoveryByStage() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -303,7 +303,7 @@ public class TestDistCpProcedure {
     assertFalse(fs.exists(new Path(context.getDst(), ".snapshot")));
   }
 
-  @Test(timeout = 30000)
+  @Test(timeout = 180000)
   public void testShutdown() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
