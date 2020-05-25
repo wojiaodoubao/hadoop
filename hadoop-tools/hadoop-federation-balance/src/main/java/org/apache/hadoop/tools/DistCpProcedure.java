@@ -31,7 +31,6 @@ import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.hdfs.protocol.proto.AclProtos;
 import org.apache.hadoop.hdfs.protocolPB.PBHelperClient;
 import org.apache.hadoop.hdfs.procedure.BalanceProcedure;
-import org.apache.hadoop.hdfs.tools.federation.RouterAdmin;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobID;
@@ -386,7 +385,7 @@ public class DistCpProcedure extends BalanceProcedure {
   /**
    * Submit distcp job and return jobId.
    */
-  private String submitDistCpJob(String src, String dst,
+  private String submitDistCpJob(String srcParam, String dstParam,
       boolean useSnapshotDiff) throws IOException {
     List<String> command = new ArrayList<>();
     command.addAll(Arrays
@@ -400,8 +399,8 @@ public class DistCpProcedure extends BalanceProcedure {
     command.add(mapNum + "");
     command.add("-bandwidth");
     command.add(bandWidth + "");
-    command.add(src);
-    command.add(dst);
+    command.add(srcParam);
+    command.add(dstParam);
 
     Configuration config = new Configuration(conf);
     DistCp distCp;

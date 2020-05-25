@@ -156,7 +156,6 @@ public class TestMountTableProcedure {
     assertEquals(dstNs, nsId);
     assertEquals(dst, dstPath);
     // Verify the mount table is not readonly.
-    RouterContext routerContext = cluster.getRandomRouter();
     URI address = routerContext.getFileSystemURI();
     DFSClient routerClient = new DFSClient(address, routerConf);
     MountTableProcedure.enableWrite(mount, routerConf);
@@ -182,7 +181,6 @@ public class TestMountTableProcedure {
     stateStore.loadCache(MountTableStoreImpl.class, true); // load cache.
 
     // Construct client.
-    RouterContext routerContext = cluster.getRandomRouter();
     URI address = routerContext.getFileSystemURI();
     DFSClient routerClient = new DFSClient(address, routerConf);
     // Verify the mount point is not readonly.

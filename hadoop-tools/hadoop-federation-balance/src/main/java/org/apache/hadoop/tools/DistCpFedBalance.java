@@ -139,7 +139,8 @@ public class DistCpFedBalance extends Configured implements Tool {
     scheduler.init(false);
     try {
       BalanceJob balanceJob =
-          constructBalanceJob(inputSrc, inputDst, routerCluster, forceCloseOpen);
+          constructBalanceJob(inputSrc, inputDst, routerCluster,
+              forceCloseOpen);
       // Submit and wait until the job is done.
       scheduler.submit(balanceJob);
       scheduler.waitUntilDone(balanceJob);
