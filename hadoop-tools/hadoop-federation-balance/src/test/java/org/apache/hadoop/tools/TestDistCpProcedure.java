@@ -117,8 +117,7 @@ public class TestDistCpProcedure {
     Path dst = new Path(testRoot, DSTDAT);
     FsPermission originalPerm = new FsPermission(777);
     fs.setPermission(src, originalPerm);
-    FedBalanceContext context =
-        new FedBalanceContext(src, dst, MOUNT, conf, false, false);
+    FedBalanceContext context = buildContext(src, dst, MOUNT);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(conf);
@@ -152,8 +151,7 @@ public class TestDistCpProcedure {
     // set permission.
     fs.setPermission(src, FsPermission.createImmutable((short) 020));
 
-    FedBalanceContext context =
-        new FedBalanceContext(src, dst, MOUNT, conf, false, false);
+    FedBalanceContext context = buildContext(src, dst, MOUNT);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
 
@@ -180,8 +178,7 @@ public class TestDistCpProcedure {
     Path src = new Path(testRoot, SRCDAT);
     Path dst = new Path(testRoot, DSTDAT);
 
-    FedBalanceContext context =
-        new FedBalanceContext(src, dst, MOUNT, conf, false, false);
+    FedBalanceContext context = buildContext(src, dst, MOUNT);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     executeProcedure(dcProcedure, Stage.DIFF_DISTCP,
@@ -220,8 +217,7 @@ public class TestDistCpProcedure {
     // open files.
     OutputStream out = fs.append(new Path(src, "a"));
 
-    FedBalanceContext context =
-        new FedBalanceContext(src, dst, MOUNT, conf, false, false);
+    FedBalanceContext context = buildContext(src, dst, MOUNT);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     executeProcedure(dcProcedure, Stage.DIFF_DISTCP,
@@ -251,8 +247,7 @@ public class TestDistCpProcedure {
     fs.setPermission(src, originalPerm);
 
     // Test the finish stage.
-    FedBalanceContext context =
-        new FedBalanceContext(src, dst, MOUNT, conf, false, false);
+    FedBalanceContext context = buildContext(src, dst, MOUNT);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     dcProcedure.disableWrite();
@@ -275,8 +270,8 @@ public class TestDistCpProcedure {
 
     Path src = new Path(testRoot, SRCDAT);
     Path dst = new Path(testRoot, DSTDAT);
-    FedBalanceContext context =
-        new FedBalanceContext(src, dst, MOUNT, conf, false, false);
+
+    FedBalanceContext context = buildContext(src, dst, MOUNT);
     final DistCpProcedure[] dcp = new DistCpProcedure[1];
     dcp[0] = new DistCpProcedure("distcp-procedure", null, 1000, context);
 
@@ -312,8 +307,7 @@ public class TestDistCpProcedure {
 
     Path src = new Path(testRoot, SRCDAT);
     Path dst = new Path(testRoot, DSTDAT);
-    FedBalanceContext context =
-        new FedBalanceContext(src, dst, MOUNT, conf, false, false);
+    FedBalanceContext context = buildContext(src, dst, MOUNT);
     DistCpProcedure dcProcedure =
         new DistCpProcedure("distcp-procedure", null, 1000, context);
     BalanceProcedureScheduler scheduler = new BalanceProcedureScheduler(conf);
@@ -326,6 +320,11 @@ public class TestDistCpProcedure {
     long sleep = Math.abs(new Random().nextLong()) % 10000;
     Thread.sleep(sleep);
     scheduler.shutDown();
+  }
+
+  private FedBalanceContext buildContext(Path src, Path dst, String mount) {
+    return new FedBalanceContext(src, dst, mount, conf, false, false, 10, 1,
+        true);
   }
 
   interface Call {

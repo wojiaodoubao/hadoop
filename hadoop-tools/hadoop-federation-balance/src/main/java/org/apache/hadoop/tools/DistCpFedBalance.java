@@ -17,6 +17,10 @@
  */
 package org.apache.hadoop.tools;
 
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.GnuParser;
+import org.apache.commons.cli.HelpFormatter;
 import org.apache.hadoop.conf.Configured;
 
 import org.apache.hadoop.fs.Path;
@@ -37,6 +41,13 @@ import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 
+import static org.apache.hadoop.tools.DistCpBalanceOptions.ROUTER;
+import static org.apache.hadoop.tools.DistCpBalanceOptions.FORCE_CLOSE_OPEN;
+import static org.apache.hadoop.tools.DistCpBalanceOptions.MAP;
+import static org.apache.hadoop.tools.DistCpBalanceOptions.BANDWIDTH;
+import static org.apache.hadoop.tools.DistCpBalanceOptions.MOVE_TO_TRASH;
+import static org.apache.hadoop.tools.DistCpBalanceOptions.cliOptions;
+
 /**
  * Balance data from src cluster to dst cluster with distcp.
  *
@@ -48,12 +59,6 @@ public class DistCpFedBalance extends Configured implements Tool {
 
   public static final Logger LOG =
       LoggerFactory.getLogger(DistCpFedBalance.class);
-  private static final String USAGE = "usage: fedbalance:\n"
-      + "\t[submit [OPTIONS] <mount_point|source_path> <target_path>]\n"
-      + "\t\tOPTIONS is none or any of:\n"
-      + "\t\t-router [true|false]\n"
-      + "\t\t-forceCloseOpen [true|false]\n"
-      + "\t[continue]";
 
   public DistCpFedBalance() {
     super();
@@ -61,18 +66,26 @@ public class DistCpFedBalance extends Configured implements Tool {
 
   @Override
   public int run(String[] args) throws Exception {
-    if (args == null || args.length < 1) {
-      System.out.println(USAGE);
+    CommandLineParser parser = new GnuParser();
+    CommandLine command = parser.parse(DistCpBalanceOptions.cliOptions, args, true);
+    String[] leftOverArgs = command.getArgs();
+    if (leftOverArgs == null || leftOverArgs.length < 1) {
+      printUsage();
       return -1;
     }
-    int index = 0;
-    String command = args[index++];
-    if (command.equals("submit")) {
-      return submit(args, index);
-    } else if (command.equals("continue")) {
+    String cmd = leftOverArgs[0];
+    if (cmd.equals("submit")) {
+      if (leftOverArgs.length < 3) {
+        printUsage();
+        return -1;
+      }
+      String inputSrc = leftOverArgs[1];
+      String inputDst = leftOverArgs[2];
+      return submit(command, inputSrc, inputDst);
+    } else if (cmd.equals("continue")) {
       return continueJob();
     } else {
-      System.out.println(USAGE);
+      printUsage();
       return -1;
     }
   }
@@ -111,27 +124,33 @@ public class DistCpFedBalance extends Configured implements Tool {
   /**
    * Start a ProcedureScheduler and submit the job.
    */
-  private int submit(String[] args, int index) throws IOException {
-    if (args.length < 3) {
-      System.out.println(USAGE);
-      return -1;
-    }
+  private int submit(CommandLine command, String inputSrc, String inputDst) throws IOException {
     // parse options.
     boolean routerCluster = true;
     boolean forceCloseOpen = false;
-    while (args[index].startsWith("-")) {
-      String option = args[index++];
-      if (option.equals("-router")) {
-        routerCluster = args[index++].equalsIgnoreCase("true");
-      } else if (option.equals("-forceCloseOpen")) {
-        forceCloseOpen = args[index++].equalsIgnoreCase("true");
-      } else {
-        System.out.println(USAGE);
-        return -1;
-      }
+    int map = 10;
+    int bandWidthLimit = 1;
+    boolean moveToTrash = true;
+
+    if (command.hasOption(ROUTER.getOpt())) {
+      routerCluster =
+          command.getOptionValue(ROUTER.getOpt()).equalsIgnoreCase("true");
     }
-    String inputSrc = args[index++];
-    String inputDst = args[index++];
+    if (command.hasOption(FORCE_CLOSE_OPEN.getOpt())) {
+      forceCloseOpen = command.getOptionValue(FORCE_CLOSE_OPEN.getOpt())
+          .equalsIgnoreCase("true");
+    }
+    if (command.hasOption(MAP.getOpt())) {
+      map = Integer.parseInt(command.getOptionValue(MAP.getOpt()));
+    }
+    if (command.hasOption(BANDWIDTH.getOpt())) {
+      bandWidthLimit =
+          Integer.parseInt(command.getOptionValue(BANDWIDTH.getOpt()));
+    }
+    if (command.hasOption(MOVE_TO_TRASH.getOpt())) {
+      moveToTrash = command.getOptionValue(MOVE_TO_TRASH.getOpt())
+          .equalsIgnoreCase("true");
+    }
 
     // Submit the job.
     BalanceProcedureScheduler scheduler =
@@ -139,8 +158,8 @@ public class DistCpFedBalance extends Configured implements Tool {
     scheduler.init(false);
     try {
       BalanceJob balanceJob =
-          constructBalanceJob(inputSrc, inputDst, routerCluster,
-              forceCloseOpen);
+          constructBalanceJob(inputSrc, inputDst, routerCluster, forceCloseOpen,
+              map, bandWidthLimit, moveToTrash);
       // Submit and wait until the job is done.
       scheduler.submit(balanceJob);
       scheduler.waitUntilDone(balanceJob);
@@ -157,27 +176,28 @@ public class DistCpFedBalance extends Configured implements Tool {
    * Construct the balance job.
    */
   private BalanceJob constructBalanceJob(String inputSrc, String inputDst,
-      boolean routerCluster, boolean forceCloseOpen) throws IOException {
+      boolean routerCluster, boolean forceCloseOpen, int map, int bandwidth,
+      boolean moveToTrash) throws IOException {
     // Construct job context.
     FedBalanceContext context;
     Path dst = new Path(inputDst);
     if (dst.toUri().getAuthority() == null) {
       throw new IOException("The destination cluster must be specified.");
     }
-    if (routerCluster) {
+    if (routerCluster) { // router-based federation.
       Path src = getSrcPath(inputSrc);
       String mount = inputSrc;
       context =
           new FedBalanceContext(src, dst, mount, getConf(), forceCloseOpen,
-              routerCluster);
-    } else {
+              routerCluster, map, bandwidth, moveToTrash);
+    } else { // normal federation cluster.
       Path src = new Path(inputSrc);
       if (src.toUri().getAuthority() == null) {
         throw new IOException("The source cluster must be specified.");
       }
       context =
           new FedBalanceContext(src, dst, "no-mount", getConf(), forceCloseOpen,
-              routerCluster);
+              routerCluster, map, bandwidth, moveToTrash);
     }
 
     // Construct the balance job.
@@ -220,5 +240,12 @@ public class DistCpFedBalance extends Configured implements Tool {
       String path = entry.getDestinations().get(0).getDest();
       return new Path("hdfs://" + ns + path);
     }
+  }
+
+  private void printUsage() {
+    HelpFormatter formatter = new HelpFormatter();
+    formatter.printHelp(
+        "fedbalance OPTIONS [submit|continue] <src> <target>\n\nOPTIONS",
+        cliOptions);
   }
 }

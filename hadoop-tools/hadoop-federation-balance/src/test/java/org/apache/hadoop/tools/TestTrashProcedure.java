@@ -66,7 +66,7 @@ public class TestTrashProcedure {
 
     FedBalanceContext context =
         new FedBalanceContext(src, dst, TestDistCpProcedure.MOUNT, conf, false,
-            false);
+            false, 10, 1, true);
     TrashProcedure trashProcedure =
         new TrashProcedure("trash-procedure", null, 1000, context);
     trashProcedure.moveToTrash();

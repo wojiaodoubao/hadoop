@@ -49,10 +49,6 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 
-import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_MAP_NUM;
-import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_MAP_NUM_DEFAULT;
-import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_BAND_WIDTH_LIMIT;
-import static org.apache.hadoop.tools.FedBalanceConfigs.DISTCP_PROCEDURE_BAND_WIDTH_LIMIT_DEFAULT;
 import static org.apache.hadoop.tools.FedBalanceConfigs.CURRENT_SNAPSHOT_NAME;
 import static org.apache.hadoop.tools.FedBalanceConfigs.LAST_SNAPSHOT_NAME;
 
@@ -118,10 +114,8 @@ public class DistCpProcedure extends BalanceProcedure {
     this.conf = context.getConf();
     this.client = new JobClient(conf);
     this.stage = Stage.PRE_CHECK;
-    this.mapNum =
-        conf.getInt(DISTCP_PROCEDURE_MAP_NUM, DISTCP_PROCEDURE_MAP_NUM_DEFAULT);
-    this.bandWidth = conf.getInt(DISTCP_PROCEDURE_BAND_WIDTH_LIMIT,
-        DISTCP_PROCEDURE_BAND_WIDTH_LIMIT_DEFAULT);
+    this.mapNum = context.getMapNum();
+    this.bandWidth = context.getBandwidthLimit();
     this.forceCloseOpenFiles = context.getForceCloseOpenFiles();
     this.useMountReadOnly = context.getUseMountReadOnly();
     srcFs = (DistributedFileSystem) context.getSrc().getFileSystem(conf);
@@ -470,10 +464,8 @@ public class DistCpProcedure extends BalanceProcedure {
     }
     srcFs = (DistributedFileSystem) context.getSrc().getFileSystem(conf);
     dstFs = (DistributedFileSystem) context.getDst().getFileSystem(conf);
-    mapNum =
-        conf.getInt(DISTCP_PROCEDURE_MAP_NUM, DISTCP_PROCEDURE_MAP_NUM_DEFAULT);
-    bandWidth = conf.getInt(DISTCP_PROCEDURE_BAND_WIDTH_LIMIT,
-        DISTCP_PROCEDURE_BAND_WIDTH_LIMIT_DEFAULT);
+    mapNum = context.getMapNum();
+    bandWidth = context.getBandwidthLimit();
     forceCloseOpenFiles = context.getForceCloseOpenFiles();
     useMountReadOnly = context.getUseMountReadOnly();
     this.client = new JobClient(conf);

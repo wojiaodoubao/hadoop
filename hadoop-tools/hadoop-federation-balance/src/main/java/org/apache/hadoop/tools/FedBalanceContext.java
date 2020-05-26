@@ -41,6 +41,13 @@ public class FedBalanceContext implements Writable {
   private boolean forceCloseOpenFiles;
   /* Disable write by setting the mount point readonly. */
   private boolean useMountReadOnly;
+  /* The map number of the distcp job. */
+  private int mapNum;
+  /* The bandwidth limit of the distcp job(MB). */
+  private int bandwidthLimit;
+  /* Move source path to trash after all the data are sync to target. Otherwise
+     delete the source directly. */
+  private boolean moveToTrash;
 
   private Configuration conf;
 
@@ -55,15 +62,23 @@ public class FedBalanceContext implements Writable {
    * @param conf the configuration.
    * @param forceCloseOpenFiles force close open files.
    * @param useMountReadOnly use mount point readonly to disable write.
+   * @param mapNum the map number of the distcp job.
+   * @param bandwidthLimit the bandwidth limit of the distcp job(MB).
+   * @param moveToTrash Move source path to trash after all the data are sync to
+   *                   target. Otherwise delete the source directly.
    */
   public FedBalanceContext(Path src, Path dst, String mount, Configuration conf,
-      boolean forceCloseOpenFiles, boolean useMountReadOnly) {
+      boolean forceCloseOpenFiles, boolean useMountReadOnly, int mapNum,
+      int bandwidthLimit, boolean moveToTrash) {
     this.src = src;
     this.dst = dst;
     this.mount = mount;
     this.conf = conf;
     this.forceCloseOpenFiles = forceCloseOpenFiles;
     this.useMountReadOnly = useMountReadOnly;
+    this.mapNum = mapNum;
+    this.bandwidthLimit = bandwidthLimit;
+    this.moveToTrash = moveToTrash;
   }
 
   public Configuration getConf() {
@@ -90,6 +105,18 @@ public class FedBalanceContext implements Writable {
     return useMountReadOnly;
   }
 
+  public int getMapNum() {
+    return mapNum;
+  }
+
+  public int getBandwidthLimit() {
+    return bandwidthLimit;
+  }
+
+  public boolean getMoveToTrash() {
+    return moveToTrash;
+  }
+
   @Override
   public void write(DataOutput out) throws IOException {
     conf.write(out);
@@ -98,6 +125,9 @@ public class FedBalanceContext implements Writable {
     Text.writeString(out, mount);
     out.writeBoolean(forceCloseOpenFiles);
     out.writeBoolean(useMountReadOnly);
+    out.writeInt(mapNum);
+    out.writeInt(bandwidthLimit);
+    out.writeBoolean(moveToTrash);
   }
 
   @Override
@@ -109,5 +139,8 @@ public class FedBalanceContext implements Writable {
     mount = Text.readString(in);
     forceCloseOpenFiles = in.readBoolean();
     useMountReadOnly = in.readBoolean();
+    mapNum = in.readInt();
+    bandwidthLimit = in.readInt();
+    moveToTrash = in.readBoolean();
   }
 }

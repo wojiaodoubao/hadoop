@@ -27,20 +27,8 @@ public final class FedBalanceConfigs {
   /* The class used for federation balance */
   public static final String FEDERATION_BALANCE_CLASS =
       "federation.balance.class";
-  /* The map number of distcp job */
-  public static final String DISTCP_PROCEDURE_MAP_NUM =
-      "distcp.procedure.map.num";
-  public static final int DISTCP_PROCEDURE_MAP_NUM_DEFAULT = 10;
-  /* The bandwidth limit of distcp job */
-  public static final String DISTCP_PROCEDURE_BAND_WIDTH_LIMIT =
-      "distcp.procedure.bandwidth.limit";
-  public static final int DISTCP_PROCEDURE_BAND_WIDTH_LIMIT_DEFAULT = 1;
   public static final String LAST_SNAPSHOT_NAME = "DISTCP-BALANCE-CURRENT";
   public static final String CURRENT_SNAPSHOT_NAME = "DISTCP-BALANCE-NEXT";
-  /* Move source path to trash after all the data are sync to target */
-  public static final String DISTCP_PROCEDURE_MOVE_TO_TRASH =
-      "distcp.procedure.move.to.trash";
-  public static final boolean DISTCP_PROCEDURE_MOVE_TO_TRASH_DEFAULT = true;
 
   private FedBalanceConfigs(){}
 }
