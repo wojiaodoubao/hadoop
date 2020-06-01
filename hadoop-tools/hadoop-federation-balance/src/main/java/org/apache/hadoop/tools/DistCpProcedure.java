@@ -25,12 +25,13 @@ import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
 import org.apache.hadoop.hdfs.protocol.OpenFilesIterator.OpenFilesType;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.hdfs.protocol.proto.AclProtos;
 import org.apache.hadoop.hdfs.protocolPB.PBHelperClient;
-import org.apache.hadoop.hdfs.procedure.BalanceProcedure;
+import org.apache.hadoop.tools.procedure.BalanceProcedure;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobID;
@@ -160,7 +161,7 @@ public class DistCpProcedure extends BalanceProcedure {
     if (dstFs.exists(dst)) {
       throw new IOException(dst + " already exists.");
     }
-    if (srcFs.exists(new Path(src, ".snapshot"))) {
+    if (srcFs.exists(new Path(src, HdfsConstants.DOT_SNAPSHOT_DIR))) {
       throw new IOException(src + " shouldn't enable snapshot.");
     }
     stage = Stage.INIT_DISTCP;
@@ -188,8 +189,8 @@ public class DistCpProcedure extends BalanceProcedure {
       cleanUpBeforeInitDistcp();
       srcFs.createSnapshot(src, CURRENT_SNAPSHOT_NAME);
       jobId = submitDistCpJob(
-          src.toString() + "/.snapshot/" + CURRENT_SNAPSHOT_NAME,
-          dst.toString(), false);
+          src.toString() + HdfsConstants.SEPARATOR_DOT_SNAPSHOT_DIR_SEPARATOR
+              + CURRENT_SNAPSHOT_NAME, dst.toString(), false);
     }
   }
 
@@ -303,6 +304,22 @@ public class DistCpProcedure extends BalanceProcedure {
     this.stage = stage;
   }
 
+  /**
+   * Submit distcp with -diff option to do the incremental copy.
+   *
+   * |   the source path      |     the dst path     |
+   * | LAST_SNAPSHOT_NAME     |   LAST_SNAPSHOT_NAME |
+   * | CURRENT_SNAPSHOT_NAME  |
+   *
+   * 1. Cleanup all the last snapshots. If there are no last snapshots then do
+   *    nothing.
+   * 2. Create the dst path snapshot named the last snapshot.
+   * 3. Rename the source path current snapshot as the last snapshot. The dst
+   *    path last snapshot and the source path last snapshot are the same now.
+   * 4. Create the current snapshot of the source path.
+   * 5. Submit the distcp job. The incremental part is from the source path last
+   *    snapshot to the source path current snapshot.
+   */
   private void submitDiffDistCp() throws IOException {
     enableSnapshot(dstFs, dst);
     deleteSnapshot(srcFs, src, LAST_SNAPSHOT_NAME);
@@ -371,7 +388,8 @@ public class DistCpProcedure extends BalanceProcedure {
       dstFs.delete(dst, true);
     }
     srcFs.allowSnapshot(src);
-    if (srcFs.exists(new Path(src, ".snapshot/" + CURRENT_SNAPSHOT_NAME))) {
+    if (srcFs.exists(new Path(src,
+        HdfsConstants.DOT_SNAPSHOT_SEPARATOR_DIR + CURRENT_SNAPSHOT_NAME))) {
       srcFs.deleteSnapshot(src, CURRENT_SNAPSHOT_NAME);
     }
   }
@@ -473,14 +491,15 @@ public class DistCpProcedure extends BalanceProcedure {
 
   private static void enableSnapshot(DistributedFileSystem dfs, Path path)
       throws IOException {
-    if (!dfs.exists(new Path(path, ".snapshot"))) {
+    if (!dfs.exists(new Path(path, HdfsConstants.DOT_SNAPSHOT_DIR))) {
       dfs.allowSnapshot(path);
     }
   }
 
   private static void deleteSnapshot(DistributedFileSystem dfs, Path path,
       String snapshotName) throws IOException {
-    Path snapshot = new Path(path, ".snapshot/" + snapshotName);
+    Path snapshot =
+        new Path(path, HdfsConstants.DOT_SNAPSHOT_SEPARATOR_DIR + snapshotName);
     if (dfs.exists(snapshot)) {
       dfs.deleteSnapshot(path, snapshotName);
     }
@@ -488,8 +507,9 @@ public class DistCpProcedure extends BalanceProcedure {
 
   private static void cleanupSnapshot(DistributedFileSystem dfs, Path path)
       throws IOException {
-    if (dfs.exists(new Path(path, ".snapshot"))) {
-      FileStatus[] status = dfs.listStatus(new Path(path, ".snapshot"));
+    if (dfs.exists(new Path(path, HdfsConstants.DOT_SNAPSHOT_DIR))) {
+      FileStatus[] status =
+          dfs.listStatus(new Path(path, HdfsConstants.DOT_SNAPSHOT_DIR));
       for (FileStatus s : status) {
         deleteSnapshot(dfs, path, s.getPath().getName());
       }

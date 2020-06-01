@@ -21,7 +21,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
-import org.apache.hadoop.hdfs.procedure.BalanceProcedure;
+import org.apache.hadoop.tools.procedure.BalanceProcedure;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -68,16 +68,21 @@ public class TrashProcedure extends BalanceProcedure {
   void moveToTrash() throws IOException {
     Path src = context.getSrc();
     if (srcFs.exists(src)) {
-      if (context.getMoveToTrash()) {
+      switch (context.getTrashOpt()) {
+      case TRASH:
         conf.setFloat(FS_TRASH_INTERVAL_KEY, 1);
         if (!Trash.moveToAppropriateTrash(srcFs, src, conf)) {
           throw new IOException("Failed move " + src + " to trash.");
         }
-      } else {
+        break;
+      case DELETE:
         if (!srcFs.delete(src, true)) {
           throw new IOException("Failed delete " + src);
         }
         LOG.info("{} is deleted.", src);
+        break;
+      default:
+        break;
       }
     }
   }

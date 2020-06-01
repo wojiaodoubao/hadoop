@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.procedure;
+package org.apache.hadoop.tools.procedure;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
@@ -43,8 +43,8 @@ import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.SCHEDULER_JOURNAL_URI;
-import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.WORK_THREAD_NUM;
+import static org.apache.hadoop.tools.procedure.BalanceProcedureConfigKeys.SCHEDULER_JOURNAL_URI;
+import static org.apache.hadoop.tools.procedure.BalanceProcedureConfigKeys.WORK_THREAD_NUM;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACLS_ENABLED_KEY;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertEquals;

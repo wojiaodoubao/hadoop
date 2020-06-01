@@ -27,6 +27,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 
+import static org.apache.hadoop.tools.FedBalanceConfigs.TRASH_OPTION;
 import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -57,8 +58,8 @@ public class TestTrashProcedure {
 
   @Test
   public void testTrashProcedure() throws Exception {
-    Path src = new Path(nnUri + "/"+getMethodName()+"-src");
-    Path dst = new Path(nnUri + "/"+getMethodName()+"-dst");
+    Path src = new Path("/" + getMethodName() + "-src");
+    Path dst = new Path("/" + getMethodName() + "-dst");
     FileSystem fs = cluster.getFileSystem();
     fs.mkdirs(src);
     fs.mkdirs(new Path(src, "dir"));
@@ -66,7 +67,7 @@ public class TestTrashProcedure {
 
     FedBalanceContext context =
         new FedBalanceContext(src, dst, TestDistCpProcedure.MOUNT, conf, false,
-            false, 10, 1, true);
+            false, 10, 1, TRASH_OPTION.TRASH);
     TrashProcedure trashProcedure =
         new TrashProcedure("trash-procedure", null, 1000, context);
     trashProcedure.moveToTrash();

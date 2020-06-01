@@ -29,6 +29,10 @@ public final class FedBalanceConfigs {
       "federation.balance.class";
   public static final String LAST_SNAPSHOT_NAME = "DISTCP-BALANCE-CURRENT";
   public static final String CURRENT_SNAPSHOT_NAME = "DISTCP-BALANCE-NEXT";
+  /* Specify the behaviour of trash. */
+  public enum TRASH_OPTION {
+    TRASH, DELETE, SKIP
+  }
 
   private FedBalanceConfigs(){}
 }

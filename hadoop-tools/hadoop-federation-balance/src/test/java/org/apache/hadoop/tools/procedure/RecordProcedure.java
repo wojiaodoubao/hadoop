@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,15 +15,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.hadoop.tools.procedure;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Classes under this package implement a state machine used for balancing data
- * across federation namespaces.
+ * This procedure records all the finished procedures. This is used for test.
  */
-@InterfaceAudience.Private
-@InterfaceStability.Evolving
+public class RecordProcedure extends BalanceProcedure<RecordProcedure> {
 
-package org.apache.hadoop.hdfs.procedure;
+  private static List<RecordProcedure> finish = new ArrayList<>();
 
-import org.apache.hadoop.classification.InterfaceAudience;
-import org.apache.hadoop.classification.InterfaceStability;
+  public RecordProcedure() {}
+
+  public RecordProcedure(String name, long delay) {
+    super(name, delay);
+  }
+
+  @Override
+  public boolean execute() throws RetryException {
+    finish.add(this);
+    return true;
+  }
+
+  public static List<RecordProcedure> getFinishList() {
+    return finish;
+  }
+}

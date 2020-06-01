@@ -24,13 +24,13 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.hadoop.conf.Configured;
 
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.procedure.BalanceProcedure;
+import org.apache.hadoop.tools.procedure.BalanceProcedure;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
 import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
 import org.apache.hadoop.hdfs.server.federation.router.RouterClient;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
-import org.apache.hadoop.hdfs.procedure.BalanceJob;
-import org.apache.hadoop.hdfs.procedure.BalanceProcedureScheduler;
+import org.apache.hadoop.tools.procedure.BalanceJob;
+import org.apache.hadoop.tools.procedure.BalanceProcedureScheduler;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.util.Tool;
 import org.slf4j.Logger;
@@ -45,8 +45,10 @@ import static org.apache.hadoop.tools.DistCpBalanceOptions.ROUTER;
 import static org.apache.hadoop.tools.DistCpBalanceOptions.FORCE_CLOSE_OPEN;
 import static org.apache.hadoop.tools.DistCpBalanceOptions.MAP;
 import static org.apache.hadoop.tools.DistCpBalanceOptions.BANDWIDTH;
-import static org.apache.hadoop.tools.DistCpBalanceOptions.MOVE_TO_TRASH;
+import static org.apache.hadoop.tools.DistCpBalanceOptions.TRASH;
+import static org.apache.hadoop.tools.DistCpBalanceOptions.DELAY_DURATION;
 import static org.apache.hadoop.tools.DistCpBalanceOptions.cliOptions;
+import static org.apache.hadoop.tools.FedBalanceConfigs.TRASH_OPTION;
 
 /**
  * Balance data from src cluster to dst cluster with distcp.
@@ -59,6 +61,12 @@ public class DistCpFedBalance extends Configured implements Tool {
 
   public static final Logger LOG =
       LoggerFactory.getLogger(DistCpFedBalance.class);
+  private static final String SUBMIT_COMMAND = "submit";
+  private static final String CONTINUE_COMMAND = "continue";
+  private static final String NO_MOUNT = "no-mount";
+  private static final String DISTCP_PROCEDURE = "distcp-procedure";
+  private static final String MOUNT_TABLE_PROCEDURE = "mount-table-procedure";
+  private static final String TRASH_PROCEDURE = "trash-procedure";
 
   public DistCpFedBalance() {
     super();
@@ -74,7 +82,7 @@ public class DistCpFedBalance extends Configured implements Tool {
       return -1;
     }
     String cmd = leftOverArgs[0];
-    if (cmd.equals("submit")) {
+    if (cmd.equals(SUBMIT_COMMAND)) {
       if (leftOverArgs.length < 3) {
         printUsage();
         return -1;
@@ -82,7 +90,7 @@ public class DistCpFedBalance extends Configured implements Tool {
       String inputSrc = leftOverArgs[1];
       String inputDst = leftOverArgs[2];
       return submit(command, inputSrc, inputDst);
-    } else if (cmd.equals("continue")) {
+    } else if (cmd.equals(CONTINUE_COMMAND)) {
       return continueJob();
     } else {
       printUsage();
@@ -123,23 +131,23 @@ public class DistCpFedBalance extends Configured implements Tool {
 
   /**
    * Start a ProcedureScheduler and submit the job.
+   *
+   * @param command the command options.
+   * @param inputSrc the source input. This specifies the source path.
+   * @param inputDst the dst input. This specifies the dst path.
    */
-  private int submit(CommandLine command, String inputSrc, String inputDst) throws IOException {
+  private int submit(CommandLine command, String inputSrc, String inputDst)
+      throws IOException {
     // parse options.
-    boolean routerCluster = true;
-    boolean forceCloseOpen = false;
+    boolean routerCluster;
+    boolean forceCloseOpen;
     int map = 10;
-    int bandWidthLimit = 1;
-    boolean moveToTrash = true;
+    int bandWidthLimit = 10;
+    long delayDuration = TimeUnit.SECONDS.toMillis(1);
+    TRASH_OPTION moveToTrash = TRASH_OPTION.TRASH;
 
-    if (command.hasOption(ROUTER.getOpt())) {
-      routerCluster =
-          command.getOptionValue(ROUTER.getOpt()).equalsIgnoreCase("true");
-    }
-    if (command.hasOption(FORCE_CLOSE_OPEN.getOpt())) {
-      forceCloseOpen = command.getOptionValue(FORCE_CLOSE_OPEN.getOpt())
-          .equalsIgnoreCase("true");
-    }
+    routerCluster = command.hasOption(ROUTER.getOpt());
+    forceCloseOpen = command.hasOption(FORCE_CLOSE_OPEN.getOpt());
     if (command.hasOption(MAP.getOpt())) {
       map = Integer.parseInt(command.getOptionValue(MAP.getOpt()));
     }
@@ -147,9 +155,22 @@ public class DistCpFedBalance extends Configured implements Tool {
       bandWidthLimit =
           Integer.parseInt(command.getOptionValue(BANDWIDTH.getOpt()));
     }
-    if (command.hasOption(MOVE_TO_TRASH.getOpt())) {
-      moveToTrash = command.getOptionValue(MOVE_TO_TRASH.getOpt())
-          .equalsIgnoreCase("true");
+    if (command.hasOption(DELAY_DURATION.getOpt())) {
+      delayDuration =
+          Long.parseLong(command.getOptionValue(DELAY_DURATION.getOpt()));
+    }
+    if (command.hasOption(TRASH.getOpt())) {
+      String val = command.getOptionValue(TRASH.getOpt());
+      if (val.equalsIgnoreCase("skip")) {
+        moveToTrash = TRASH_OPTION.SKIP;
+      } else if (val.equalsIgnoreCase("trash")) {
+        moveToTrash = TRASH_OPTION.TRASH;
+      } else if (val.equalsIgnoreCase("delete")) {
+        moveToTrash = TRASH_OPTION.DELETE;
+      } else {
+        printUsage();
+        return -1;
+      }
     }
 
     // Submit the job.
@@ -159,7 +180,7 @@ public class DistCpFedBalance extends Configured implements Tool {
     try {
       BalanceJob balanceJob =
           constructBalanceJob(inputSrc, inputDst, routerCluster, forceCloseOpen,
-              map, bandWidthLimit, moveToTrash);
+              map, bandWidthLimit, moveToTrash, delayDuration);
       // Submit and wait until the job is done.
       scheduler.submit(balanceJob);
       scheduler.waitUntilDone(balanceJob);
@@ -174,10 +195,20 @@ public class DistCpFedBalance extends Configured implements Tool {
 
   /**
    * Construct the balance job.
+   *
+   * @param inputSrc the source input. This specifies the source path.
+   * @param inputDst the dst input. This specifies the dst path.
+   * @param routerCluster balancing in an rbf cluster.
+   * @param forceCloseOpen force close all open files while there is no diff.
+   * @param map max number of concurrent maps to use for copy.
+   * @param bandwidth specify bandwidth per map in MB.
+   * @param trashOpt specify the trash behaviour of the source path.
+   * @param delayDuration specify the delay duration when the procedure needs
+   *                     retry in millie seconds.
    */
   private BalanceJob constructBalanceJob(String inputSrc, String inputDst,
       boolean routerCluster, boolean forceCloseOpen, int map, int bandwidth,
-      boolean moveToTrash) throws IOException {
+      TRASH_OPTION trashOpt, long delayDuration) throws IOException {
     // Construct job context.
     FedBalanceContext context;
     Path dst = new Path(inputDst);
@@ -189,30 +220,31 @@ public class DistCpFedBalance extends Configured implements Tool {
       String mount = inputSrc;
       context =
           new FedBalanceContext(src, dst, mount, getConf(), forceCloseOpen,
-              routerCluster, map, bandwidth, moveToTrash);
+              routerCluster, map, bandwidth, trashOpt);
     } else { // normal federation cluster.
       Path src = new Path(inputSrc);
       if (src.toUri().getAuthority() == null) {
         throw new IOException("The source cluster must be specified.");
       }
       context =
-          new FedBalanceContext(src, dst, "no-mount", getConf(), forceCloseOpen,
-              routerCluster, map, bandwidth, moveToTrash);
+          new FedBalanceContext(src, dst, NO_MOUNT, getConf(), forceCloseOpen,
+              routerCluster, map, bandwidth, trashOpt);
     }
 
     // Construct the balance job.
     BalanceJob.Builder<BalanceProcedure> builder = new BalanceJob.Builder<>();
     DistCpProcedure dcp =
-        new DistCpProcedure("distcp-procedure", null, 1000, context);
+        new DistCpProcedure(DISTCP_PROCEDURE, null, delayDuration, context);
     builder.nextProcedure(dcp);
     if (routerCluster) {
       MountTableProcedure mtp =
-          new MountTableProcedure("mount-table-procedure", null, 1000, inputSrc,
-              dst.toUri().getPath(), dst.toUri().getAuthority(), getConf());
+          new MountTableProcedure(MOUNT_TABLE_PROCEDURE, null, delayDuration,
+              inputSrc, dst.toUri().getPath(), dst.toUri().getAuthority(),
+              getConf());
       builder.nextProcedure(mtp);
     }
     TrashProcedure tp =
-        new TrashProcedure("trash-procedure", null, 1000, context);
+        new TrashProcedure(TRASH_PROCEDURE, null, delayDuration, context);
     builder.nextProcedure(tp);
     return builder.build();
   }
@@ -226,19 +258,22 @@ public class DistCpFedBalance extends Configured implements Tool {
         RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_DEFAULT);
     InetSocketAddress routerSocket = NetUtils.createSocketAddr(address);
     RouterClient rClient = new RouterClient(routerSocket, getConf());
-    MountTableManager mountTable = rClient.getMountTableManager();
-    MountTable entry =
-        MountTableProcedure.getMountEntry(fedPath, mountTable);
-    if (entry == null) {
-      throw new IllegalArgumentException(
-          "The mount point doesn't exist. path=" + fedPath);
-    } else if (entry.getDestinations().size() > 1) {
-      throw new IllegalArgumentException(
-          "The mount point has more than one destination. path=" + fedPath);
-    } else {
-      String ns = entry.getDestinations().get(0).getNameserviceId();
-      String path = entry.getDestinations().get(0).getDest();
-      return new Path("hdfs://" + ns + path);
+    try {
+      MountTableManager mountTable = rClient.getMountTableManager();
+      MountTable entry = MountTableProcedure.getMountEntry(fedPath, mountTable);
+      if (entry == null) {
+        throw new IllegalArgumentException(
+            "The mount point doesn't exist. path=" + fedPath);
+      } else if (entry.getDestinations().size() > 1) {
+        throw new IllegalArgumentException(
+            "The mount point has more than one destination. path=" + fedPath);
+      } else {
+        String ns = entry.getDestinations().get(0).getNameserviceId();
+        String path = entry.getDestinations().get(0).getDest();
+        return new Path("hdfs://" + ns + path);
+      }
+    } finally {
+      rClient.close();
     }
   }
 

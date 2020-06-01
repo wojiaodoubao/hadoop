@@ -24,12 +24,13 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.tools.DistCpProcedure.Stage;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.hdfs.procedure.BalanceJob;
-import org.apache.hadoop.hdfs.procedure.BalanceProcedure.RetryException;
-import org.apache.hadoop.hdfs.procedure.BalanceProcedureScheduler;
+import org.apache.hadoop.tools.procedure.BalanceJob;
+import org.apache.hadoop.tools.procedure.BalanceProcedure.RetryException;
+import org.apache.hadoop.tools.procedure.BalanceProcedureScheduler;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.v2.MiniMRYarnCluster;
 import org.junit.AfterClass;
@@ -47,11 +48,12 @@ import java.net.URI;
 import java.util.Random;
 
 import static junit.framework.TestCase.assertTrue;
-import static org.apache.hadoop.hdfs.procedure.BalanceProcedureConfigKeys.SCHEDULER_JOURNAL_URI;
+import static org.apache.hadoop.tools.procedure.BalanceProcedureConfigKeys.SCHEDULER_JOURNAL_URI;
 import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
 import static org.apache.hadoop.test.LambdaTestUtils.intercept;
 import static org.apache.hadoop.tools.FedBalanceConfigs.CURRENT_SNAPSHOT_NAME;
 import static org.apache.hadoop.tools.FedBalanceConfigs.LAST_SNAPSHOT_NAME;
+import static org.apache.hadoop.tools.FedBalanceConfigs.TRASH_OPTION;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertEquals;
@@ -133,8 +135,10 @@ public class TestDistCpProcedure {
     }
     assertNull(balanceJob.getError());
     assertTrue(fs.exists(dst));
-    assertFalse(fs.exists(new Path(context.getSrc(), ".snapshot")));
-    assertFalse(fs.exists(new Path(context.getDst(), ".snapshot")));
+    assertFalse(
+        fs.exists(new Path(context.getSrc(), HdfsConstants.DOT_SNAPSHOT_DIR)));
+    assertFalse(
+        fs.exists(new Path(context.getDst(), HdfsConstants.DOT_SNAPSHOT_DIR)));
     assertEquals(originalPerm, fs.getFileStatus(dst).getPermission());
     assertEquals(0, fs.getFileStatus(src).getPermission().toShort());
   }
@@ -255,8 +259,8 @@ public class TestDistCpProcedure {
 
     // Verify path and permission.
     assertTrue(fs.exists(dst));
-    assertFalse(fs.exists(new Path(src, ".snapshot")));
-    assertFalse(fs.exists(new Path(dst, ".snapshot")));
+    assertFalse(fs.exists(new Path(src, HdfsConstants.DOT_SNAPSHOT_DIR)));
+    assertFalse(fs.exists(new Path(dst, HdfsConstants.DOT_SNAPSHOT_DIR)));
     assertEquals(originalPerm, fs.getFileStatus(dst).getPermission());
     assertEquals(0, fs.getFileStatus(src).getPermission().toShort());
   }
@@ -294,8 +298,10 @@ public class TestDistCpProcedure {
     dcp[0] = seDe(dcp[0]);
     assertTrue(dcp[0].execute());
     assertTrue(fs.exists(dst));
-    assertFalse(fs.exists(new Path(context.getSrc(), ".snapshot")));
-    assertFalse(fs.exists(new Path(context.getDst(), ".snapshot")));
+    assertFalse(
+        fs.exists(new Path(context.getSrc(), HdfsConstants.DOT_SNAPSHOT_DIR)));
+    assertFalse(
+        fs.exists(new Path(context.getDst(), HdfsConstants.DOT_SNAPSHOT_DIR)));
   }
 
   @Test(timeout = 180000)
@@ -324,7 +330,7 @@ public class TestDistCpProcedure {
 
   private FedBalanceContext buildContext(Path src, Path dst, String mount) {
     return new FedBalanceContext(src, dst, mount, conf, false, false, 10, 1,
-        true);
+        TRASH_OPTION.TRASH);
   }
 
   interface Call {

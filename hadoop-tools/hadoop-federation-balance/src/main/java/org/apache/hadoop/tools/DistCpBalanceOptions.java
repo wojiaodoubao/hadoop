@@ -31,7 +31,7 @@ public class DistCpBalanceOptions {
    * is `true`.
    */
   static Option ROUTER =
-      new Option("router", true, "Run in router-based federation mode.");
+      new Option("router", false, "Run in router-based federation mode.");
 
   /**
    * If true, in DIFF_DISTCP stage it will force close all open files when
@@ -39,7 +39,7 @@ public class DistCpBalanceOptions {
    * the DIFF_DISTCP stage will wait until there is no open files. The
    * default value is `false`.
    */
-  static Option FORCE_CLOSE_OPEN = new Option("forceCloseOpen", true,
+  static Option FORCE_CLOSE_OPEN = new Option("forceCloseOpen", false,
       "Force close all open files if the src and dst are synced.");
 
   /**
@@ -55,12 +55,17 @@ public class DistCpBalanceOptions {
   static Option BANDWIDTH =
       new Option("bandwidth", true, "Specify bandwidth per map in MB.");
 
+  static Option DELAY_DURATION = new Option("delay", true,
+      "Specify the delay duration in millie seconds.");
+
   /**
-   * Move source path to trash after all the data are sync to target.
-   * Otherwise delete the source directly.
+   * Move the source path to trash after all the data are sync to target, or
+   * delete the source directly, or skip both trash and deletion.
    */
-  static Option MOVE_TO_TRASH = new Option("moveToTrash", true,
-      "Move source path to trash. Otherwise delete the source directly.");
+  static Option TRASH = new Option("moveToTrash", true,
+      "Move the source path to trash, or delete the source path directly,"
+          + " or skip both trash and deletion."
+          + " This accepts 3 values: trash, delete and skip.");
 
   static final Options cliOptions = new Options();
 
@@ -69,6 +74,6 @@ public class DistCpBalanceOptions {
     cliOptions.addOption(FORCE_CLOSE_OPEN);
     cliOptions.addOption(MAP);
     cliOptions.addOption(BANDWIDTH);
-    cliOptions.addOption(MOVE_TO_TRASH);
+    cliOptions.addOption(TRASH);
   }
 }

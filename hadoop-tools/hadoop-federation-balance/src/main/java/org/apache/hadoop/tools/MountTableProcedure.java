@@ -29,7 +29,7 @@ import org.apache.hadoop.hdfs.server.federation.store.protocol.RefreshMountTable
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesRequest;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesResponse;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
-import org.apache.hadoop.hdfs.procedure.BalanceProcedure;
+import org.apache.hadoop.tools.procedure.BalanceProcedure;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.net.NetUtils;
 

@@ -26,6 +26,8 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import static org.apache.hadoop.tools.FedBalanceConfigs.TRASH_OPTION;
+
 /**
  * This class contains the basic information needed when Federation Balance.
  */
@@ -47,7 +49,7 @@ public class FedBalanceContext implements Writable {
   private int bandwidthLimit;
   /* Move source path to trash after all the data are sync to target. Otherwise
      delete the source directly. */
-  private boolean moveToTrash;
+  private TRASH_OPTION trashOpt;
 
   private Configuration conf;
 
@@ -64,12 +66,12 @@ public class FedBalanceContext implements Writable {
    * @param useMountReadOnly use mount point readonly to disable write.
    * @param mapNum the map number of the distcp job.
    * @param bandwidthLimit the bandwidth limit of the distcp job(MB).
-   * @param moveToTrash Move source path to trash after all the data are sync to
-   *                   target. Otherwise delete the source directly.
+   * @param trashOpt specify the trash behaviour after all the data are sync to
+   *                the target.
    */
   public FedBalanceContext(Path src, Path dst, String mount, Configuration conf,
       boolean forceCloseOpenFiles, boolean useMountReadOnly, int mapNum,
-      int bandwidthLimit, boolean moveToTrash) {
+      int bandwidthLimit, TRASH_OPTION trashOpt) {
     this.src = src;
     this.dst = dst;
     this.mount = mount;
@@ -78,7 +80,7 @@ public class FedBalanceContext implements Writable {
     this.useMountReadOnly = useMountReadOnly;
     this.mapNum = mapNum;
     this.bandwidthLimit = bandwidthLimit;
-    this.moveToTrash = moveToTrash;
+    this.trashOpt = trashOpt;
   }
 
   public Configuration getConf() {
@@ -113,8 +115,8 @@ public class FedBalanceContext implements Writable {
     return bandwidthLimit;
   }
 
-  public boolean getMoveToTrash() {
-    return moveToTrash;
+  public TRASH_OPTION getTrashOpt() {
+    return trashOpt;
   }
 
   @Override
@@ -127,7 +129,7 @@ public class FedBalanceContext implements Writable {
     out.writeBoolean(useMountReadOnly);
     out.writeInt(mapNum);
     out.writeInt(bandwidthLimit);
-    out.writeBoolean(moveToTrash);
+    out.writeInt(trashOpt.ordinal());
   }
 
   @Override
@@ -141,6 +143,6 @@ public class FedBalanceContext implements Writable {
     useMountReadOnly = in.readBoolean();
     mapNum = in.readInt();
     bandwidthLimit = in.readInt();
-    moveToTrash = in.readBoolean();
+    trashOpt = TRASH_OPTION.values()[in.readInt()];
   }
 }
