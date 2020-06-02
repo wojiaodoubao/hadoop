@@ -70,6 +70,7 @@ public class TestBalanceProcedureScheduler {
     CONF.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY, "hdfs:///");
     CONF.setBoolean(DFS_NAMENODE_ACLS_ENABLED_KEY, true);
     CONF.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
+    CONF.setLong(DFSConfigKeys.DFS_NAMENODE_MIN_BLOCK_SIZE_KEY, 0);
     CONF.setInt(WORK_THREAD_NUM, 1);
 
     cluster = new MiniDFSCluster.Builder(CONF).numDataNodes(3).build();

@@ -26,7 +26,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-import static org.apache.hadoop.tools.FedBalanceConfigs.TRASH_OPTION;
+import static org.apache.hadoop.tools.FedBalanceConfigs.TrashOption;
 
 /**
  * This class contains the basic information needed when Federation Balance.
@@ -49,39 +49,11 @@ public class FedBalanceContext implements Writable {
   private int bandwidthLimit;
   /* Move source path to trash after all the data are sync to target. Otherwise
      delete the source directly. */
-  private TRASH_OPTION trashOpt;
+  private TrashOption trashOpt;
 
   private Configuration conf;
 
   public FedBalanceContext() {}
-
-  /**
-   * Constructor of FedBalanceContext.
-   *
-   * @param src the source path in the source sub-cluster.
-   * @param dst the target path in the target sub-cluster.
-   * @param mount the mount point to be balanced.
-   * @param conf the configuration.
-   * @param forceCloseOpenFiles force close open files.
-   * @param useMountReadOnly use mount point readonly to disable write.
-   * @param mapNum the map number of the distcp job.
-   * @param bandwidthLimit the bandwidth limit of the distcp job(MB).
-   * @param trashOpt specify the trash behaviour after all the data are sync to
-   *                the target.
-   */
-  public FedBalanceContext(Path src, Path dst, String mount, Configuration conf,
-      boolean forceCloseOpenFiles, boolean useMountReadOnly, int mapNum,
-      int bandwidthLimit, TRASH_OPTION trashOpt) {
-    this.src = src;
-    this.dst = dst;
-    this.mount = mount;
-    this.conf = conf;
-    this.forceCloseOpenFiles = forceCloseOpenFiles;
-    this.useMountReadOnly = useMountReadOnly;
-    this.mapNum = mapNum;
-    this.bandwidthLimit = bandwidthLimit;
-    this.trashOpt = trashOpt;
-  }
 
   public Configuration getConf() {
     return conf;
@@ -115,7 +87,7 @@ public class FedBalanceContext implements Writable {
     return bandwidthLimit;
   }
 
-  public TRASH_OPTION getTrashOpt() {
+  public TrashOption getTrashOpt() {
     return trashOpt;
   }
 
@@ -143,6 +115,92 @@ public class FedBalanceContext implements Writable {
     useMountReadOnly = in.readBoolean();
     mapNum = in.readInt();
     bandwidthLimit = in.readInt();
-    trashOpt = TRASH_OPTION.values()[in.readInt()];
+    trashOpt = TrashOption.values()[in.readInt()];
+  }
+
+  static class Builder {
+    private final Path src;
+    private final Path dst;
+    private final String mount;
+    private final Configuration conf;
+    private boolean forceCloseOpenFiles = false;
+    private boolean useMountReadOnly = false;
+    private int mapNum;
+    private int bandwidthLimit;
+    private TrashOption trashOpt;
+
+    /**
+     * This class helps building the FedBalanceContext.
+     *
+     * @param src the source path in the source sub-cluster.
+     * @param dst the target path in the target sub-cluster.
+     * @param mount the mount point to be balanced.
+     * @param conf the configuration.
+     */
+    public Builder(Path src, Path dst, String mount, Configuration conf) {
+      this.src = src;
+      this.dst = dst;
+      this.mount = mount;
+      this.conf = conf;
+    }
+
+    /**
+     * Force close open files.
+     */
+    public Builder setForceCloseOpenFiles(boolean forceCloseOpenFiles) {
+      this.forceCloseOpenFiles = forceCloseOpenFiles;
+      return this;
+    }
+
+    /**
+     * Use mount point readonly to disable write.
+     */
+    public Builder setUseMountReadOnly(boolean useMountReadOnly) {
+      this.useMountReadOnly = useMountReadOnly;
+      return this;
+    }
+
+    /**
+     * The map number of the distcp job.
+     */
+    public Builder setMapNum(int mapNum) {
+      this.mapNum = mapNum;
+      return this;
+    }
+
+    /**
+     * The bandwidth limit of the distcp job(MB).
+     */
+    public Builder setBandwidthLimit(int bandwidthLimit) {
+      this.bandwidthLimit = bandwidthLimit;
+      return this;
+    }
+
+    /**
+     * Specify the trash behaviour after all the data is sync to the target.
+     * */
+    public Builder setTrash(TrashOption trashOpt) {
+      this.trashOpt = trashOpt;
+      return this;
+    }
+
+    /**
+     * Build the FedBalanceContext.
+     *
+     * @return the FedBalanceContext obj.
+     */
+    public FedBalanceContext build() {
+      FedBalanceContext context = new FedBalanceContext();
+      context.src = this.src;
+      context.dst = this.dst;
+      context.mount = this.mount;
+      context.conf = this.conf;
+      context.forceCloseOpenFiles = this.forceCloseOpenFiles;
+      context.useMountReadOnly = this.useMountReadOnly;
+      context.mapNum = this.mapNum;
+      context.bandwidthLimit = this.bandwidthLimit;
+      context.trashOpt = this.trashOpt;
+      return context;
+    }
   }
 }

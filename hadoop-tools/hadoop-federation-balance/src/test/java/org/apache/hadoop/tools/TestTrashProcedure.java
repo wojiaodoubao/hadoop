@@ -27,7 +27,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 
-import static org.apache.hadoop.tools.FedBalanceConfigs.TRASH_OPTION;
+import static org.apache.hadoop.tools.FedBalanceConfigs.TrashOption;
 import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -66,8 +66,9 @@ public class TestTrashProcedure {
     assertTrue(fs.exists(src));
 
     FedBalanceContext context =
-        new FedBalanceContext(src, dst, TestDistCpProcedure.MOUNT, conf, false,
-            false, 10, 1, TRASH_OPTION.TRASH);
+        new FedBalanceContext.Builder(src, dst, TestDistCpProcedure.MOUNT, conf)
+            .setMapNum(10).setBandwidthLimit(1).setTrash(TrashOption.TRASH)
+            .build();
     TrashProcedure trashProcedure =
         new TrashProcedure("trash-procedure", null, 1000, context);
     trashProcedure.moveToTrash();

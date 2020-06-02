@@ -47,8 +47,8 @@ import static org.apache.hadoop.tools.DistCpBalanceOptions.MAP;
 import static org.apache.hadoop.tools.DistCpBalanceOptions.BANDWIDTH;
 import static org.apache.hadoop.tools.DistCpBalanceOptions.TRASH;
 import static org.apache.hadoop.tools.DistCpBalanceOptions.DELAY_DURATION;
-import static org.apache.hadoop.tools.DistCpBalanceOptions.cliOptions;
-import static org.apache.hadoop.tools.FedBalanceConfigs.TRASH_OPTION;
+import static org.apache.hadoop.tools.DistCpBalanceOptions.CLI_OPTIONS;
+import static org.apache.hadoop.tools.FedBalanceConfigs.TrashOption;
 
 /**
  * Balance data from src cluster to dst cluster with distcp.
@@ -68,6 +68,127 @@ public class DistCpFedBalance extends Configured implements Tool {
   private static final String MOUNT_TABLE_PROCEDURE = "mount-table-procedure";
   private static final String TRASH_PROCEDURE = "trash-procedure";
 
+  /**
+   * This class helps building the balance job.
+   */
+  private class Builder {
+    /* Balancing in an rbf cluster. */
+    private boolean routerCluster = false;
+    /* Force close all open files while there is no diff. */
+    private boolean forceCloseOpen = false;
+    /* Max number of concurrent maps to use for copy. */
+    private int map = 10;
+    /* Specify bandwidth per map in MB. */
+    private int bandwidth = 10;
+    /* Specify the trash behaviour of the source path. */
+    private TrashOption trashOpt = TrashOption.TRASH;
+    /* Specify the duration(millie seconds) when the procedure needs retry. */
+    private long delayDuration = TimeUnit.SECONDS.toMillis(1);
+    /* The source input. This specifies the source path. */
+    private final String inputSrc;
+    /* The dst input. This specifies the dst path. */
+    private final String inputDst;
+
+    Builder(String inputSrc, String inputDst) {
+      this.inputSrc = inputSrc;
+      this.inputDst = inputDst;
+    }
+
+    /**
+     * Whether balancing in an rbf cluster.
+     */
+    public Builder setRouterCluster(boolean routerCluster) {
+      this.routerCluster = routerCluster;
+      return this;
+    }
+
+    /**
+     * Whether force close all open files while there is no diff.
+     */
+    public Builder setForceCloseOpen(boolean forceCloseOpen) {
+      this.forceCloseOpen = forceCloseOpen;
+      return this;
+    }
+
+    /**
+     * Max number of concurrent maps to use for copy.
+     */
+    public Builder setMap(int map) {
+      this.map = map;
+      return this;
+    }
+
+    /**
+     * Specify bandwidth per map in MB.
+     */
+    public Builder setBandWidth(int bandWidth) {
+      this.bandwidth = bandWidth;
+      return this;
+    }
+
+    /**
+     * Specify the trash behaviour of the source path.
+     */
+    public Builder setTrashOpt(TrashOption trashOpt) {
+      this.trashOpt = trashOpt;
+      return this;
+    }
+
+    /**
+     * Specify the duration(millie seconds) when the procedure needs retry.
+     */
+    public Builder setDelayDuration(long delayDuration) {
+      this.delayDuration = delayDuration;
+      return this;
+    }
+
+    /**
+     * Build the balance job.
+     */
+    public BalanceJob build() throws IOException {
+      // Construct job context.
+      FedBalanceContext context;
+      Path dst = new Path(inputDst);
+      if (dst.toUri().getAuthority() == null) {
+        throw new IOException("The destination cluster must be specified.");
+      }
+      if (routerCluster) { // router-based federation.
+        Path src = getSrcPath(inputSrc);
+        String mount = inputSrc;
+        context = new FedBalanceContext.Builder(src, dst, mount, getConf())
+            .setForceCloseOpenFiles(forceCloseOpen)
+            .setUseMountReadOnly(routerCluster).setMapNum(map)
+            .setBandwidthLimit(bandwidth).setTrash(trashOpt).build();
+      } else { // normal federation cluster.
+        Path src = new Path(inputSrc);
+        if (src.toUri().getAuthority() == null) {
+          throw new IOException("The source cluster must be specified.");
+        }
+        context = new FedBalanceContext.Builder(src, dst, NO_MOUNT, getConf())
+            .setForceCloseOpenFiles(forceCloseOpen)
+            .setUseMountReadOnly(routerCluster).setMapNum(map)
+            .setBandwidthLimit(bandwidth).setTrash(trashOpt).build();
+      }
+
+      // Construct the balance job.
+      BalanceJob.Builder<BalanceProcedure> builder = new BalanceJob.Builder<>();
+      DistCpProcedure dcp =
+          new DistCpProcedure(DISTCP_PROCEDURE, null, delayDuration, context);
+      builder.nextProcedure(dcp);
+      if (routerCluster) {
+        MountTableProcedure mtp =
+            new MountTableProcedure(MOUNT_TABLE_PROCEDURE, null, delayDuration,
+                inputSrc, dst.toUri().getPath(), dst.toUri().getAuthority(),
+                getConf());
+        builder.nextProcedure(mtp);
+      }
+      TrashProcedure tp =
+          new TrashProcedure(TRASH_PROCEDURE, null, delayDuration, context);
+      builder.nextProcedure(tp);
+      return builder.build();
+    }
+  }
+
   public DistCpFedBalance() {
     super();
   }
@@ -75,7 +196,8 @@ public class DistCpFedBalance extends Configured implements Tool {
   @Override
   public int run(String[] args) throws Exception {
     CommandLineParser parser = new GnuParser();
-    CommandLine command = parser.parse(DistCpBalanceOptions.cliOptions, args, true);
+    CommandLine command =
+        parser.parse(DistCpBalanceOptions.CLI_OPTIONS, args, true);
     String[] leftOverArgs = command.getArgs();
     if (leftOverArgs == null || leftOverArgs.length < 1) {
       printUsage();
@@ -138,35 +260,29 @@ public class DistCpFedBalance extends Configured implements Tool {
    */
   private int submit(CommandLine command, String inputSrc, String inputDst)
       throws IOException {
+    Builder builder = new Builder(inputSrc, inputDst);
     // parse options.
-    boolean routerCluster;
-    boolean forceCloseOpen;
-    int map = 10;
-    int bandWidthLimit = 10;
-    long delayDuration = TimeUnit.SECONDS.toMillis(1);
-    TRASH_OPTION moveToTrash = TRASH_OPTION.TRASH;
-
-    routerCluster = command.hasOption(ROUTER.getOpt());
-    forceCloseOpen = command.hasOption(FORCE_CLOSE_OPEN.getOpt());
+    builder.setRouterCluster(command.hasOption(ROUTER.getOpt()));
+    builder.setForceCloseOpen(command.hasOption(FORCE_CLOSE_OPEN.getOpt()));
     if (command.hasOption(MAP.getOpt())) {
-      map = Integer.parseInt(command.getOptionValue(MAP.getOpt()));
+      builder.setMap(Integer.parseInt(command.getOptionValue(MAP.getOpt())));
     }
     if (command.hasOption(BANDWIDTH.getOpt())) {
-      bandWidthLimit =
-          Integer.parseInt(command.getOptionValue(BANDWIDTH.getOpt()));
+      builder.setBandWidth(
+          Integer.parseInt(command.getOptionValue(BANDWIDTH.getOpt())));
     }
     if (command.hasOption(DELAY_DURATION.getOpt())) {
-      delayDuration =
-          Long.parseLong(command.getOptionValue(DELAY_DURATION.getOpt()));
+      builder.setDelayDuration(
+          Long.parseLong(command.getOptionValue(DELAY_DURATION.getOpt())));
     }
     if (command.hasOption(TRASH.getOpt())) {
       String val = command.getOptionValue(TRASH.getOpt());
       if (val.equalsIgnoreCase("skip")) {
-        moveToTrash = TRASH_OPTION.SKIP;
+        builder.setTrashOpt(TrashOption.SKIP);
       } else if (val.equalsIgnoreCase("trash")) {
-        moveToTrash = TRASH_OPTION.TRASH;
+        builder.setTrashOpt(TrashOption.TRASH);
       } else if (val.equalsIgnoreCase("delete")) {
-        moveToTrash = TRASH_OPTION.DELETE;
+        builder.setTrashOpt(TrashOption.DELETE);
       } else {
         printUsage();
         return -1;
@@ -178,9 +294,7 @@ public class DistCpFedBalance extends Configured implements Tool {
         new BalanceProcedureScheduler(getConf());
     scheduler.init(false);
     try {
-      BalanceJob balanceJob =
-          constructBalanceJob(inputSrc, inputDst, routerCluster, forceCloseOpen,
-              map, bandWidthLimit, moveToTrash, delayDuration);
+      BalanceJob balanceJob = builder.build();
       // Submit and wait until the job is done.
       scheduler.submit(balanceJob);
       scheduler.waitUntilDone(balanceJob);
@@ -191,62 +305,6 @@ public class DistCpFedBalance extends Configured implements Tool {
       scheduler.shutDown();
     }
     return 0;
-  }
-
-  /**
-   * Construct the balance job.
-   *
-   * @param inputSrc the source input. This specifies the source path.
-   * @param inputDst the dst input. This specifies the dst path.
-   * @param routerCluster balancing in an rbf cluster.
-   * @param forceCloseOpen force close all open files while there is no diff.
-   * @param map max number of concurrent maps to use for copy.
-   * @param bandwidth specify bandwidth per map in MB.
-   * @param trashOpt specify the trash behaviour of the source path.
-   * @param delayDuration specify the delay duration when the procedure needs
-   *                     retry in millie seconds.
-   */
-  private BalanceJob constructBalanceJob(String inputSrc, String inputDst,
-      boolean routerCluster, boolean forceCloseOpen, int map, int bandwidth,
-      TRASH_OPTION trashOpt, long delayDuration) throws IOException {
-    // Construct job context.
-    FedBalanceContext context;
-    Path dst = new Path(inputDst);
-    if (dst.toUri().getAuthority() == null) {
-      throw new IOException("The destination cluster must be specified.");
-    }
-    if (routerCluster) { // router-based federation.
-      Path src = getSrcPath(inputSrc);
-      String mount = inputSrc;
-      context =
-          new FedBalanceContext(src, dst, mount, getConf(), forceCloseOpen,
-              routerCluster, map, bandwidth, trashOpt);
-    } else { // normal federation cluster.
-      Path src = new Path(inputSrc);
-      if (src.toUri().getAuthority() == null) {
-        throw new IOException("The source cluster must be specified.");
-      }
-      context =
-          new FedBalanceContext(src, dst, NO_MOUNT, getConf(), forceCloseOpen,
-              routerCluster, map, bandwidth, trashOpt);
-    }
-
-    // Construct the balance job.
-    BalanceJob.Builder<BalanceProcedure> builder = new BalanceJob.Builder<>();
-    DistCpProcedure dcp =
-        new DistCpProcedure(DISTCP_PROCEDURE, null, delayDuration, context);
-    builder.nextProcedure(dcp);
-    if (routerCluster) {
-      MountTableProcedure mtp =
-          new MountTableProcedure(MOUNT_TABLE_PROCEDURE, null, delayDuration,
-              inputSrc, dst.toUri().getPath(), dst.toUri().getAuthority(),
-              getConf());
-      builder.nextProcedure(mtp);
-    }
-    TrashProcedure tp =
-        new TrashProcedure(TRASH_PROCEDURE, null, delayDuration, context);
-    builder.nextProcedure(tp);
-    return builder.build();
   }
 
   /**
@@ -281,6 +339,6 @@ public class DistCpFedBalance extends Configured implements Tool {
     HelpFormatter formatter = new HelpFormatter();
     formatter.printHelp(
         "fedbalance OPTIONS [submit|continue] <src> <target>\n\nOPTIONS",
-        cliOptions);
+        CLI_OPTIONS);
   }
 }

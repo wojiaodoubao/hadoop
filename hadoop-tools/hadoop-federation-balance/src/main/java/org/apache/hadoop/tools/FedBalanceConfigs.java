@@ -30,7 +30,7 @@ public final class FedBalanceConfigs {
   public static final String LAST_SNAPSHOT_NAME = "DISTCP-BALANCE-CURRENT";
   public static final String CURRENT_SNAPSHOT_NAME = "DISTCP-BALANCE-NEXT";
   /* Specify the behaviour of trash. */
-  public enum TRASH_OPTION {
+  public enum TrashOption {
     TRASH, DELETE, SKIP
   }
 

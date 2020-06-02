@@ -53,7 +53,7 @@ import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
 import static org.apache.hadoop.test.LambdaTestUtils.intercept;
 import static org.apache.hadoop.tools.FedBalanceConfigs.CURRENT_SNAPSHOT_NAME;
 import static org.apache.hadoop.tools.FedBalanceConfigs.LAST_SNAPSHOT_NAME;
-import static org.apache.hadoop.tools.FedBalanceConfigs.TRASH_OPTION;
+import static org.apache.hadoop.tools.FedBalanceConfigs.TrashOption;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertEquals;
@@ -329,8 +329,8 @@ public class TestDistCpProcedure {
   }
 
   private FedBalanceContext buildContext(Path src, Path dst, String mount) {
-    return new FedBalanceContext(src, dst, mount, conf, false, false, 10, 1,
-        TRASH_OPTION.TRASH);
+    return new FedBalanceContext.Builder(src, dst, mount, conf).setMapNum(10)
+        .setBandwidthLimit(1).setTrash(TrashOption.TRASH).build();
   }
 
   interface Call {

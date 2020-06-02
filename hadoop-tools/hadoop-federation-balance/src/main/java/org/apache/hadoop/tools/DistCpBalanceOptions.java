@@ -23,6 +23,11 @@ import org.apache.commons.cli.Options;
 public class DistCpBalanceOptions {
 
   /**
+   * The private construct protects this class from being instantiated.
+   */
+  private DistCpBalanceOptions() {}
+
+  /**
    * If `true` the command runs in router mode. The source path is taken as
    * a mount point. It will disable write by setting the mount point
    * readonly. Otherwise the command works in normal federation mode. The
@@ -30,7 +35,7 @@ public class DistCpBalanceOptions {
    * cancelling the `x` permission of the source path. The default value
    * is `true`.
    */
-  static Option ROUTER =
+  final static Option ROUTER =
       new Option("router", false, "Run in router-based federation mode.");
 
   /**
@@ -39,41 +44,41 @@ public class DistCpBalanceOptions {
    * the DIFF_DISTCP stage will wait until there is no open files. The
    * default value is `false`.
    */
-  static Option FORCE_CLOSE_OPEN = new Option("forceCloseOpen", false,
+  final static Option FORCE_CLOSE_OPEN = new Option("forceCloseOpen", false,
       "Force close all open files if the src and dst are synced.");
 
   /**
-   * Max number of maps to use during copy. DistCp will split work
-   * as equally as possible among these maps
+   * Max number of maps to use during copy. DistCp will split work as equally
+   * as possible among these maps.
    */
-  static Option MAP =
+  final static Option MAP =
       new Option("map", true, "Max number of concurrent maps to use for copy");
 
   /**
-   * Specify bandwidth per map in MB, accepts bandwidth as a fraction
+   * Specify bandwidth per map in MB, accepts bandwidth as a fraction.
    */
-  static Option BANDWIDTH =
+  final static Option BANDWIDTH =
       new Option("bandwidth", true, "Specify bandwidth per map in MB.");
 
-  static Option DELAY_DURATION = new Option("delay", true,
+  final static Option DELAY_DURATION = new Option("delay", true,
       "Specify the delay duration in millie seconds.");
 
   /**
    * Move the source path to trash after all the data are sync to target, or
    * delete the source directly, or skip both trash and deletion.
    */
-  static Option TRASH = new Option("moveToTrash", true,
+  final static Option TRASH = new Option("moveToTrash", true,
       "Move the source path to trash, or delete the source path directly,"
           + " or skip both trash and deletion."
           + " This accepts 3 values: trash, delete and skip.");
 
-  static final Options cliOptions = new Options();
+  final static Options CLI_OPTIONS = new Options();
 
   static {
-    cliOptions.addOption(ROUTER);
-    cliOptions.addOption(FORCE_CLOSE_OPEN);
-    cliOptions.addOption(MAP);
-    cliOptions.addOption(BANDWIDTH);
-    cliOptions.addOption(TRASH);
+    CLI_OPTIONS.addOption(ROUTER);
+    CLI_OPTIONS.addOption(FORCE_CLOSE_OPEN);
+    CLI_OPTIONS.addOption(MAP);
+    CLI_OPTIONS.addOption(BANDWIDTH);
+    CLI_OPTIONS.addOption(TRASH);
   }
 }
