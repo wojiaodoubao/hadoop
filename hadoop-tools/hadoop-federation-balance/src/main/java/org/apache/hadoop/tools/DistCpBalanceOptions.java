@@ -20,7 +20,10 @@ package org.apache.hadoop.tools;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 
-public class DistCpBalanceOptions {
+/**
+ * Command line options of DistCpFedBalance.
+ */
+public final class DistCpBalanceOptions {
 
   /**
    * The private construct protects this class from being instantiated.

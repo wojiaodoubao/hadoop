@@ -137,7 +137,7 @@ public class FedBalanceContext implements Writable {
      * @param mount the mount point to be balanced.
      * @param conf the configuration.
      */
-    public Builder(Path src, Path dst, String mount, Configuration conf) {
+    Builder(Path src, Path dst, String mount, Configuration conf) {
       this.src = src;
       this.dst = dst;
       this.mount = mount;
@@ -146,41 +146,46 @@ public class FedBalanceContext implements Writable {
 
     /**
      * Force close open files.
+     * @param value true if force close all the open files.
      */
-    public Builder setForceCloseOpenFiles(boolean forceCloseOpenFiles) {
-      this.forceCloseOpenFiles = forceCloseOpenFiles;
+    public Builder setForceCloseOpenFiles(boolean value) {
+      this.forceCloseOpenFiles = value;
       return this;
     }
 
     /**
      * Use mount point readonly to disable write.
+     * @param value true if disabling write by setting mount point readonly.
      */
-    public Builder setUseMountReadOnly(boolean useMountReadOnly) {
-      this.useMountReadOnly = useMountReadOnly;
+    public Builder setUseMountReadOnly(boolean value) {
+      this.useMountReadOnly = value;
       return this;
     }
 
     /**
      * The map number of the distcp job.
+     * @param value the map number of the distcp.
      */
-    public Builder setMapNum(int mapNum) {
-      this.mapNum = mapNum;
+    public Builder setMapNum(int value) {
+      this.mapNum = value;
       return this;
     }
 
     /**
      * The bandwidth limit of the distcp job(MB).
+     * @param value the bandwidth.
      */
-    public Builder setBandwidthLimit(int bandwidthLimit) {
-      this.bandwidthLimit = bandwidthLimit;
+    public Builder setBandwidthLimit(int value) {
+      this.bandwidthLimit = value;
       return this;
     }
 
     /**
      * Specify the trash behaviour after all the data is sync to the target.
+     * @param value the trash option.
      * */
-    public Builder setTrash(TrashOption trashOpt) {
-      this.trashOpt = trashOpt;
+    public Builder setTrash(TrashOption value) {
+      this.trashOpt = value;
       return this;
     }
 

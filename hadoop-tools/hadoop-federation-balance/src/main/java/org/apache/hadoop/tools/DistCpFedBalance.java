@@ -96,49 +96,55 @@ public class DistCpFedBalance extends Configured implements Tool {
 
     /**
      * Whether balancing in an rbf cluster.
+     * @param value true if it's running in a router-based federation cluster.
      */
-    public Builder setRouterCluster(boolean routerCluster) {
-      this.routerCluster = routerCluster;
+    public Builder setRouterCluster(boolean value) {
+      this.routerCluster = value;
       return this;
     }
 
     /**
      * Whether force close all open files while there is no diff.
+     * @param value true if force close all the open files.
      */
-    public Builder setForceCloseOpen(boolean forceCloseOpen) {
-      this.forceCloseOpen = forceCloseOpen;
+    public Builder setForceCloseOpen(boolean value) {
+      this.forceCloseOpen = value;
       return this;
     }
 
     /**
      * Max number of concurrent maps to use for copy.
+     * @param value the map number of the distcp.
      */
-    public Builder setMap(int map) {
-      this.map = map;
+    public Builder setMap(int value) {
+      this.map = value;
       return this;
     }
 
     /**
      * Specify bandwidth per map in MB.
+     * @param value the bandwidth.
      */
-    public Builder setBandWidth(int bandWidth) {
-      this.bandwidth = bandWidth;
+    public Builder setBandWidth(int value) {
+      this.bandwidth = value;
       return this;
     }
 
     /**
      * Specify the trash behaviour of the source path.
+     * @param value the trash option.
      */
-    public Builder setTrashOpt(TrashOption trashOpt) {
-      this.trashOpt = trashOpt;
+    public Builder setTrashOpt(TrashOption value) {
+      this.trashOpt = value;
       return this;
     }
 
     /**
      * Specify the duration(millie seconds) when the procedure needs retry.
+     * @param value the delay duration of the job.
      */
-    public Builder setDelayDuration(long delayDuration) {
-      this.delayDuration = delayDuration;
+    public Builder setDelayDuration(long value) {
+      this.delayDuration = value;
       return this;
     }
 
