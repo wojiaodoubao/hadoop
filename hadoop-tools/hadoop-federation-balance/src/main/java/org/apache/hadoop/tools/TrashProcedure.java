@@ -28,6 +28,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
+import org.apache.hadoop.tools.FedBalanceConfigs.TrashOption;
 
 /**
  * This procedure moves the source path to the corresponding trash.
@@ -68,9 +69,10 @@ public class TrashProcedure extends BalanceProcedure {
   void moveToTrash() throws IOException {
     Path src = context.getSrc();
     if (srcFs.exists(src)) {
-      switch (context.getTrashOpt()) {
+      TrashOption trashOption = context.getTrashOpt();
+      switch (trashOption) {
       case TRASH:
-        conf.setFloat(FS_TRASH_INTERVAL_KEY, 1);
+        conf.setFloat(FS_TRASH_INTERVAL_KEY, 60);
         if (!Trash.moveToAppropriateTrash(srcFs, src, conf)) {
           throw new IOException("Failed move " + src + " to trash.");
         }
@@ -81,10 +83,16 @@ public class TrashProcedure extends BalanceProcedure {
         }
         LOG.info("{} is deleted.", src);
         break;
-      default:
+      case SKIP:
         break;
+      default:
+        throw new IOException("Unexpected trash option=" + trashOption);
       }
     }
+  }
+
+  public FedBalanceContext getContext() {
+    return context;
   }
 
   @Override

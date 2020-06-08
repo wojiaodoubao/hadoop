@@ -156,7 +156,7 @@ public class DistCpProcedure extends BalanceProcedure {
   void preCheck() throws IOException {
     FileStatus status = srcFs.getFileStatus(src);
     if (!status.isDirectory()) {
-      throw new IOException(src + " doesn't exist.");
+      throw new IOException(src + " should be a directory.");
     }
     if (dstFs.exists(dst)) {
       throw new IOException(dst + " already exists.");
@@ -164,7 +164,7 @@ public class DistCpProcedure extends BalanceProcedure {
     if (srcFs.exists(new Path(src, HdfsConstants.DOT_SNAPSHOT_DIR))) {
       throw new IOException(src + " shouldn't enable snapshot.");
     }
-    stage = Stage.INIT_DISTCP;
+    updateStage(Stage.INIT_DISTCP);
   }
 
   /**
@@ -177,7 +177,7 @@ public class DistCpProcedure extends BalanceProcedure {
       if (job.isComplete()) {
         jobId = null; // unset jobId because the job is done.
         if (job.isSuccessful()) {
-          stage = Stage.DIFF_DISTCP;
+          updateStage(Stage.DIFF_DISTCP);
           return;
         } else {
           LOG.warn("DistCp failed. Failure={}", job.getFailureInfo());
@@ -214,7 +214,7 @@ public class DistCpProcedure extends BalanceProcedure {
       }
     } else if (!verifyDiff()) {
       if (!verifyOpenFiles() || forceCloseOpenFiles) {
-        stage = Stage.DISABLE_WRITE;
+        updateStage(Stage.DISABLE_WRITE);
       } else {
         throw new RetryException();
       }
@@ -224,8 +224,8 @@ public class DistCpProcedure extends BalanceProcedure {
   }
 
   /**
-   * Disable write either by making the mount entry readonly or cancelling the x
-   * permission of the source path.
+   * Disable write either by making the mount entry readonly or cancelling the
+   * execute permission of the source path.
    */
   void disableWrite() throws IOException {
     if (useMountReadOnly) {
@@ -238,7 +238,7 @@ public class DistCpProcedure extends BalanceProcedure {
       acl = srcFs.getAclStatus(src);
       srcFs.setPermission(src, FsPermission.createImmutable((short) 0));
     }
-    stage = Stage.FINAL_DISTCP;
+    updateStage(Stage.FINAL_DISTCP);
   }
 
   /**
@@ -268,7 +268,7 @@ public class DistCpProcedure extends BalanceProcedure {
       if (job.isComplete()) {
         jobId = null; // unset jobId because the job is done.
         if (job.isSuccessful()) {
-          stage = Stage.FINISH;
+          updateStage(Stage.FINISH);
           return;
         } else {
           throw new IOException(
@@ -300,8 +300,11 @@ public class DistCpProcedure extends BalanceProcedure {
   }
 
   @VisibleForTesting
-  void setStage(Stage stage) {
-    this.stage = stage;
+  void updateStage(Stage value) {
+    String oldStage = stage == null ? "null" : stage.name();
+    String newStage = value == null ? "null" : value.name();
+    LOG.info("Stage updated from {} to {}.", oldStage, newStage);
+    stage = value;
   }
 
   /**
@@ -385,12 +388,16 @@ public class DistCpProcedure extends BalanceProcedure {
 
   private void cleanUpBeforeInitDistcp() throws IOException {
     if (dstFs.exists(dst)) { // clean up.
-      dstFs.delete(dst, true);
+      throw new IOException("The dst path=" + dst + " already exists. The admin"
+          + " should delete it before submitting the initial distcp job.");
     }
     srcFs.allowSnapshot(src);
-    if (srcFs.exists(new Path(src,
-        HdfsConstants.DOT_SNAPSHOT_SEPARATOR_DIR + CURRENT_SNAPSHOT_NAME))) {
-      srcFs.deleteSnapshot(src, CURRENT_SNAPSHOT_NAME);
+    Path snapshotPath = new Path(src,
+        HdfsConstants.DOT_SNAPSHOT_DIR_SEPARATOR + CURRENT_SNAPSHOT_NAME);
+    if (srcFs.exists(snapshotPath)) {
+      throw new IOException("The src snapshot=" + snapshotPath +
+          " already exists. The admin should delete the snapshot before"
+          + " submitting the initial distcp.");
     }
   }
 
@@ -499,7 +506,7 @@ public class DistCpProcedure extends BalanceProcedure {
   private static void deleteSnapshot(DistributedFileSystem dfs, Path path,
       String snapshotName) throws IOException {
     Path snapshot =
-        new Path(path, HdfsConstants.DOT_SNAPSHOT_SEPARATOR_DIR + snapshotName);
+        new Path(path, HdfsConstants.DOT_SNAPSHOT_DIR_SEPARATOR + snapshotName);
     if (dfs.exists(snapshot)) {
       dfs.deleteSnapshot(path, snapshotName);
     }

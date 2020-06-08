@@ -25,12 +25,18 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutput;
+import java.io.DataInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 
 import static org.apache.hadoop.tools.FedBalanceConfigs.TrashOption;
 import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Test TrashProcedure.
@@ -73,5 +79,24 @@ public class TestTrashProcedure {
         new TrashProcedure("trash-procedure", null, 1000, context);
     trashProcedure.moveToTrash();
     assertFalse(fs.exists(src));
+  }
+
+  @Test
+  public void testSeDeserialize() throws Exception {
+    Path src = new Path("/" + getMethodName() + "-src");
+    Path dst = new Path("/" + getMethodName() + "-dst");
+    FedBalanceContext context =
+        new FedBalanceContext.Builder(src, dst, TestDistCpProcedure.MOUNT, conf)
+            .setMapNum(10).setBandwidthLimit(1).setTrash(TrashOption.TRASH)
+            .build();
+    TrashProcedure trashProcedure =
+        new TrashProcedure("trash-procedure", null, 1000, context);
+    ByteArrayOutputStream bao = new ByteArrayOutputStream();
+    DataOutput dataOut = new DataOutputStream(bao);
+    trashProcedure.write(dataOut);
+    trashProcedure = new TrashProcedure();
+    trashProcedure.readFields(
+        new DataInputStream(new ByteArrayInputStream(bao.toByteArray())));
+    assertEquals(context, trashProcedure.getContext());
   }
 }

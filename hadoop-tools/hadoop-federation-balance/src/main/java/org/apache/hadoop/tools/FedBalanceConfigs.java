@@ -34,5 +34,17 @@ public final class FedBalanceConfigs {
     TRASH, DELETE, SKIP
   }
 
+  /* The worker threads number of the BalanceProcedureScheduler */
+  public static final String WORK_THREAD_NUM =
+      "hadoop.hdfs.procedure.work.thread.num";
+  public static final int WORK_THREAD_NUM_DEFAULT = 10;
+  /* The uri of the journal */
+  public static final String SCHEDULER_JOURNAL_URI =
+      "hadoop.hdfs.procedure.scheduler.journal.uri";
+  public static final String JOB_PREFIX = "JOB-";
+  public static final String TMP_TAIL = ".tmp";
+  public static final String JOURNAL_CLASS =
+      "hadoop.hdfs.procedure.journal.class";
+
   private FedBalanceConfigs(){}
 }

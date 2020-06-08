@@ -37,9 +37,9 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 
-import static org.apache.hadoop.tools.procedure.BalanceProcedureConfigKeys.SCHEDULER_JOURNAL_URI;
-import static org.apache.hadoop.tools.procedure.BalanceProcedureConfigKeys.TMP_TAIL;
-import static org.apache.hadoop.tools.procedure.BalanceProcedureConfigKeys.JOB_PREFIX;
+import static org.apache.hadoop.tools.FedBalanceConfigs.SCHEDULER_JOURNAL_URI;
+import static org.apache.hadoop.tools.FedBalanceConfigs.TMP_TAIL;
+import static org.apache.hadoop.tools.FedBalanceConfigs.JOB_PREFIX;
 
 /**
  * BalanceJournal based on HDFS. This class stores all the journals in the HDFS.

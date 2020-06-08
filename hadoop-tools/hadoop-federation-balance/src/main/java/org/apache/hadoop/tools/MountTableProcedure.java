@@ -143,6 +143,7 @@ public class MountTableProcedure extends BalanceProcedure {
     for (MountTable result : results) {
       if (mount.equals(result.getSourcePath())) {
         existingEntry = result;
+        break;
       }
     }
     return existingEntry;

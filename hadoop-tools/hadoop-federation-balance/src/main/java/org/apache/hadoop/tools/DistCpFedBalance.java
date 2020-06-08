@@ -176,6 +176,7 @@ public class DistCpFedBalance extends Configured implements Tool {
             .setBandwidthLimit(bandwidth).setTrash(trashOpt).build();
       }
 
+      LOG.info(context.toString());
       // Construct the balance job.
       BalanceJob.Builder<BalanceProcedure> builder = new BalanceJob.Builder<>();
       DistCpProcedure dcp =
@@ -241,7 +242,7 @@ public class DistCpFedBalance extends Configured implements Tool {
           if (!job.isJobDone()) {
             unfinished++;
           }
-          System.out.println(job);
+          LOG.info(job.toString());
         }
         if (unfinished == 0) {
           break;

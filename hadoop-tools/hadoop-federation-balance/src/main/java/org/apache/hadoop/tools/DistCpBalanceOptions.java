@@ -35,7 +35,7 @@ public final class DistCpBalanceOptions {
    * a mount point. It will disable write by setting the mount point
    * readonly. Otherwise the command works in normal federation mode. The
    * source path is taken as the full path. It will disable write by
-   * cancelling the `x` permission of the source path. The default value
+   * cancelling the execute permission of the source path. The default value
    * is `true`.
    */
   final static Option ROUTER =
@@ -72,8 +72,10 @@ public final class DistCpBalanceOptions {
    */
   final static Option TRASH = new Option("moveToTrash", true,
       "Move the source path to trash, or delete the source path directly,"
-          + " or skip both trash and deletion."
-          + " This accepts 3 values: trash, delete and skip.");
+          + " or skip both trash and deletion. This accepts 3 values: trash,"
+          + " delete and skip. By default the server side trash interval is"
+          + " used. If the trash is disabled in the server side, the default"
+          + " trash interval 60 minutes is used.");
 
   final static Options CLI_OPTIONS = new Options();
 

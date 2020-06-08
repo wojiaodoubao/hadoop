@@ -21,6 +21,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
+import org.apache.commons.lang3.builder.EqualsBuilder;
+import org.apache.commons.lang3.builder.HashCodeBuilder;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -116,6 +118,62 @@ public class FedBalanceContext implements Writable {
     mapNum = in.readInt();
     bandwidthLimit = in.readInt();
     trashOpt = TrashOption.values()[in.readInt()];
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (obj == null) {
+      return false;
+    }
+    if (obj == this) {
+      return true;
+    }
+    if (obj.getClass() != getClass()) {
+      return false;
+    }
+    FedBalanceContext bc = (FedBalanceContext) obj;
+    return new EqualsBuilder()
+        .append(src, bc.src)
+        .append(dst, bc.dst)
+        .append(mount, bc.mount)
+        .append(forceCloseOpenFiles, bc.forceCloseOpenFiles)
+        .append(useMountReadOnly, bc.useMountReadOnly)
+        .append(mapNum, bc.mapNum)
+        .append(bandwidthLimit, bc.bandwidthLimit)
+        .append(trashOpt, bc.trashOpt)
+        .isEquals();
+  }
+
+  @Override
+  public int hashCode() {
+    return new HashCodeBuilder(17, 37)
+        .append(src)
+        .append(dst)
+        .append(mount)
+        .append(forceCloseOpenFiles)
+        .append(useMountReadOnly)
+        .append(mapNum)
+        .append(bandwidthLimit)
+        .append(trashOpt)
+        .build();
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder builder = new StringBuilder("FedBalance context:");
+    builder.append(" src=").append(src);
+    builder.append(" dst=").append(dst);
+    if (useMountReadOnly) {
+      builder.append(" router-mode=true");
+      builder.append(" mount-point=").append(mount);
+    } else {
+      builder.append(" router-mode=false");
+    }
+    builder.append(" forceCloseOpenFiles=").append(forceCloseOpenFiles);
+    builder.append(" trash=").append(trashOpt.name());
+    builder.append(" map=").append(mapNum);
+    builder.append(" bandwidth=").append(bandwidthLimit);
+    return builder.toString();
   }
 
   static class Builder {

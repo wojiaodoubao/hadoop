@@ -202,7 +202,7 @@ public class TestMountTableProcedure {
   }
 
   @Test
-  public void testSeDe() throws Exception {
+  public void testSeDeserialize() throws Exception {
     String fedPath = "/test-path";
     String dst = "/test-dst";
     String dstNs = "ns1";

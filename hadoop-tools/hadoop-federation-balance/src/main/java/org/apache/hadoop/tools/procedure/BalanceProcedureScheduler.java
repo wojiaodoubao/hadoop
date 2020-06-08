@@ -40,9 +40,9 @@ import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.hadoop.tools.procedure.BalanceProcedureConfigKeys.WORK_THREAD_NUM;
-import static org.apache.hadoop.tools.procedure.BalanceProcedureConfigKeys.WORK_THREAD_NUM_DEFAULT;
-import static org.apache.hadoop.tools.procedure.BalanceProcedureConfigKeys.JOURNAL_CLASS;
+import static org.apache.hadoop.tools.FedBalanceConfigs.WORK_THREAD_NUM;
+import static org.apache.hadoop.tools.FedBalanceConfigs.WORK_THREAD_NUM_DEFAULT;
+import static org.apache.hadoop.tools.FedBalanceConfigs.JOURNAL_CLASS;
 /**
  * The state machine framework consist of:
  *   Job:                The state machine. It implements the basic logic of the
