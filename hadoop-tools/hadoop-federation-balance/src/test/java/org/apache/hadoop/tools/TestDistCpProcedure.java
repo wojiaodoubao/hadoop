@@ -145,7 +145,7 @@ public class TestDistCpProcedure {
     assertEquals(0, fs.getFileStatus(src).getPermission().toShort());
     for (FileEntry e : srcfiles) { // verify file len.
       if (!e.isDir) {
-        Path targetFile = new Path(e.path.replace(SRCDAT, DSTDAT));
+        Path targetFile = new Path(testRoot, e.path.replace(SRCDAT, DSTDAT));
         assertEquals(FILE_SIZE, fs.getFileStatus(targetFile).getLen());
       }
     }
