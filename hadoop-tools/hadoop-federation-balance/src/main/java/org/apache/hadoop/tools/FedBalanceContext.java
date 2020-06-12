@@ -52,6 +52,8 @@ public class FedBalanceContext implements Writable {
   /* Move source path to trash after all the data are sync to target. Otherwise
      delete the source directly. */
   private TrashOption trashOpt;
+  /* How long will the procedures be delayed. */
+  private long delayDuration;
 
   private Configuration conf;
 
@@ -104,6 +106,7 @@ public class FedBalanceContext implements Writable {
     out.writeInt(mapNum);
     out.writeInt(bandwidthLimit);
     out.writeInt(trashOpt.ordinal());
+    out.writeLong(delayDuration);
   }
 
   @Override
@@ -118,6 +121,7 @@ public class FedBalanceContext implements Writable {
     mapNum = in.readInt();
     bandwidthLimit = in.readInt();
     trashOpt = TrashOption.values()[in.readInt()];
+    delayDuration = in.readLong();
   }
 
   @Override
@@ -141,6 +145,7 @@ public class FedBalanceContext implements Writable {
         .append(mapNum, bc.mapNum)
         .append(bandwidthLimit, bc.bandwidthLimit)
         .append(trashOpt, bc.trashOpt)
+        .append(delayDuration, bc.delayDuration)
         .isEquals();
   }
 
@@ -155,6 +160,7 @@ public class FedBalanceContext implements Writable {
         .append(mapNum)
         .append(bandwidthLimit)
         .append(trashOpt)
+        .append(delayDuration)
         .build();
   }
 
@@ -162,17 +168,18 @@ public class FedBalanceContext implements Writable {
   public String toString() {
     StringBuilder builder = new StringBuilder("FedBalance context:");
     builder.append(" src=").append(src);
-    builder.append(" dst=").append(dst);
+    builder.append(", dst=").append(dst);
     if (useMountReadOnly) {
-      builder.append(" router-mode=true");
-      builder.append(" mount-point=").append(mount);
+      builder.append(", router-mode=true");
+      builder.append(", mount-point=").append(mount);
     } else {
-      builder.append(" router-mode=false");
+      builder.append(", router-mode=false");
     }
-    builder.append(" forceCloseOpenFiles=").append(forceCloseOpenFiles);
-    builder.append(" trash=").append(trashOpt.name());
-    builder.append(" map=").append(mapNum);
-    builder.append(" bandwidth=").append(bandwidthLimit);
+    builder.append(", forceCloseOpenFiles=").append(forceCloseOpenFiles);
+    builder.append(", trash=").append(trashOpt.name());
+    builder.append(", map=").append(mapNum);
+    builder.append(", bandwidth=").append(bandwidthLimit);
+    builder.append(", delayDuration=").append(delayDuration);
     return builder.toString();
   }
 
@@ -186,6 +193,7 @@ public class FedBalanceContext implements Writable {
     private int mapNum;
     private int bandwidthLimit;
     private TrashOption trashOpt;
+    private long delayDuration;
 
     /**
      * This class helps building the FedBalanceContext.
@@ -248,6 +256,14 @@ public class FedBalanceContext implements Writable {
     }
 
     /**
+     * Specify the delayed duration when the procedures need to retry.
+     */
+    public Builder setDelayDuration(long value) {
+      this.delayDuration = value;
+      return this;
+    }
+
+    /**
      * Build the FedBalanceContext.
      *
      * @return the FedBalanceContext obj.
@@ -263,6 +279,7 @@ public class FedBalanceContext implements Writable {
       context.mapNum = this.mapNum;
       context.bandwidthLimit = this.bandwidthLimit;
       context.trashOpt = this.trashOpt;
+      context.delayDuration = this.delayDuration;
       return context;
     }
   }

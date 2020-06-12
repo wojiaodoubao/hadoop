@@ -391,7 +391,6 @@ public class DistCpProcedure extends BalanceProcedure {
       throw new IOException("The dst path=" + dst + " already exists. The admin"
           + " should delete it before submitting the initial distcp job.");
     }
-    srcFs.allowSnapshot(src);
     Path snapshotPath = new Path(src,
         HdfsConstants.DOT_SNAPSHOT_DIR_SEPARATOR + CURRENT_SNAPSHOT_NAME);
     if (srcFs.exists(snapshotPath)) {
@@ -399,6 +398,7 @@ public class DistCpProcedure extends BalanceProcedure {
           " already exists. The admin should delete the snapshot before"
           + " submitting the initial distcp.");
     }
+    srcFs.allowSnapshot(src);
   }
 
   /**

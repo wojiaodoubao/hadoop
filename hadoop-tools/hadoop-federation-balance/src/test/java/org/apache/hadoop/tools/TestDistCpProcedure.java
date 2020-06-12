@@ -357,7 +357,8 @@ public class TestDistCpProcedure {
 
   private FedBalanceContext buildContext(Path src, Path dst, String mount) {
     return new FedBalanceContext.Builder(src, dst, mount, conf).setMapNum(10)
-        .setBandwidthLimit(1).setTrash(TrashOption.TRASH).build();
+        .setBandwidthLimit(1).setTrash(TrashOption.TRASH).setDelayDuration(1000)
+        .build();
   }
 
   interface Call {

@@ -21,7 +21,7 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 
 /**
- * Command line options of DistCpFedBalance.
+ * Command line options of FedBalance.
  */
 public final class DistCpBalanceOptions {
 
@@ -31,15 +31,15 @@ public final class DistCpBalanceOptions {
   private DistCpBalanceOptions() {}
 
   /**
-   * If `true` the command runs in router mode. The source path is taken as
-   * a mount point. It will disable write by setting the mount point
-   * readonly. Otherwise the command works in normal federation mode. The
-   * source path is taken as the full path. It will disable write by
-   * cancelling the execute permission of the source path. The default value
-   * is `true`.
+   * Run in router-based federation mode.
    */
-  final static Option ROUTER =
-      new Option("router", false, "Run in router-based federation mode.");
+  final static Option ROUTER = new Option("router", false,
+      "If `true` the command runs in router mode. The source path is "
+          + "taken as a mount point. It will disable write by setting the mount"
+          + " point readonly. Otherwise the command works in normal federation"
+          + " mode. The source path is taken as the full path. It will disable"
+          + " write by cancelling the execute permission of the source path."
+          + " The default value is `true`.");
 
   /**
    * If true, in DIFF_DISTCP stage it will force close all open files when
@@ -63,8 +63,13 @@ public final class DistCpBalanceOptions {
   final static Option BANDWIDTH =
       new Option("bandwidth", true, "Specify bandwidth per map in MB.");
 
+  /**
+   * Specify the delayed duration(millie seconds) to retry the Job.
+   */
   final static Option DELAY_DURATION = new Option("delay", true,
-      "Specify the delay duration in millie seconds.");
+      "This specifies the delayed duration(millie seconds) when the job"
+          + " needs to retry. A job may retry many times and check the state"
+          + " when it waits for the distcp job to finish.");
 
   /**
    * Move the source path to trash after all the data are sync to target, or
@@ -84,6 +89,7 @@ public final class DistCpBalanceOptions {
     CLI_OPTIONS.addOption(FORCE_CLOSE_OPEN);
     CLI_OPTIONS.addOption(MAP);
     CLI_OPTIONS.addOption(BANDWIDTH);
+    CLI_OPTIONS.addOption(DELAY_DURATION);
     CLI_OPTIONS.addOption(TRASH);
   }
 }
