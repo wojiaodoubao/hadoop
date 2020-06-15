@@ -95,6 +95,19 @@ public class DistCpProcedure extends BalanceProcedure {
   private DistributedFileSystem srcFs; // fs of the src cluster.
   private DistributedFileSystem dstFs; // fs of the dst cluster.
 
+  /**
+   * Test only. In unit test we use the LocalJobRunner to run the distcp jobs.
+   * Here we save the job to look up the job status. The localJob won't be
+   * serialized thus won't be recovered.
+   */
+  @VisibleForTesting
+  private Job localJob;
+  /**
+   * Enable test mode. Use LocalJobRunner to run the distcp jobs.
+   */
+  @VisibleForTesting
+  static boolean ENABLED_FOR_TEST = false;
+
   public DistCpProcedure() {
   }
 
@@ -171,7 +184,7 @@ public class DistCpProcedure extends BalanceProcedure {
    * The initial distcp. Copying src to dst.
    */
   void initDistCp() throws IOException, RetryException {
-    RunningJob job = getCurrentJob();
+    RunningJobStatus job = getCurrentJob();
     if (job != null) {
       // the distcp has been submitted.
       if (job.isComplete()) {
@@ -186,7 +199,7 @@ public class DistCpProcedure extends BalanceProcedure {
         throw new RetryException();
       }
     } else {
-      cleanUpBeforeInitDistcp();
+      pathCheckBeforeInitDistcp();
       srcFs.createSnapshot(src, CURRENT_SNAPSHOT_NAME);
       jobId = submitDistCpJob(
           src.toString() + HdfsConstants.SEPARATOR_DOT_SNAPSHOT_DIR_SEPARATOR
@@ -199,14 +212,14 @@ public class DistCpProcedure extends BalanceProcedure {
    * CURRENT_SNAPSHOT_NAME.
    */
   void diffDistCp() throws IOException, RetryException {
-    RunningJob job = getCurrentJob();
+    RunningJobStatus job = getCurrentJob();
     if (job != null) {
       if (job.isComplete()) {
         jobId = null;
         if (job.isSuccessful()) {
-          LOG.info("DistCp succeeded. jobId={}", job.getID().toString());
+          LOG.info("DistCp succeeded. jobId={}", job.getJobID());
         } else {
-          throw new IOException("DistCp failed. jobId=" + job.getID().toString()
+          throw new IOException("DistCp failed. jobId=" + job.getJobID()
               + " failure=" + job.getFailureInfo());
         }
       } else {
@@ -262,7 +275,7 @@ public class DistCpProcedure extends BalanceProcedure {
     // Close all open files then do the final distcp.
     closeAllOpenFiles(srcFs, src);
     // Final distcp.
-    RunningJob job = getCurrentJob();
+    RunningJobStatus job = getCurrentJob();
     if (job != null) {
       // the distcp has been submitted.
       if (job.isComplete()) {
@@ -379,14 +392,33 @@ public class DistCpProcedure extends BalanceProcedure {
     return iterator.hasNext();
   }
 
-  private RunningJob getCurrentJob() throws IOException {
+  private RunningJobStatus getCurrentJob() throws IOException {
     if (jobId != null) {
-      return client.getJob(JobID.forName(jobId));
+      if (ENABLED_FOR_TEST) {
+        return getCurrentLocalJob();
+      } else {
+        RunningJob latestJob = client.getJob(JobID.forName(jobId));
+        return latestJob == null ? null : new YarnRunningJobStatus(latestJob);
+      }
     }
     return null;
   }
 
-  private void cleanUpBeforeInitDistcp() throws IOException {
+  private LocalJobStatus getCurrentLocalJob() throws IOException {
+    if (localJob != null) {
+      Job latestJob;
+      try {
+        latestJob = localJob.getCluster().getJob(JobID.forName(jobId));
+      } catch (InterruptedException e) {
+        throw new IOException(e);
+      }
+      return latestJob == null ? null : new LocalJobStatus(latestJob);
+    } else {
+      return null;
+    }
+  }
+
+  private void pathCheckBeforeInitDistcp() throws IOException {
     if (dstFs.exists(dst)) { // clean up.
       throw new IOException("The dst path=" + dst + " already exists. The admin"
           + " should delete it before submitting the initial distcp job.");
@@ -428,6 +460,9 @@ public class DistCpProcedure extends BalanceProcedure {
           OptionsParser.parse(command.toArray(new String[]{})));
       Job job = distCp.createAndSubmitJob();
       LOG.info("Submit distcp job={}", job);
+      if (ENABLED_FOR_TEST) {
+        localJob = job;
+      }
       return job.getJobID().toString();
     } catch (Exception e) {
       throw new IOException("Submit job failed.", e);
@@ -503,7 +538,7 @@ public class DistCpProcedure extends BalanceProcedure {
     }
   }
 
-  private static void deleteSnapshot(DistributedFileSystem dfs, Path path,
+  static void deleteSnapshot(DistributedFileSystem dfs, Path path,
       String snapshotName) throws IOException {
     Path snapshot =
         new Path(path, HdfsConstants.DOT_SNAPSHOT_DIR_SEPARATOR + snapshotName);
@@ -512,7 +547,7 @@ public class DistCpProcedure extends BalanceProcedure {
     }
   }
 
-  private static void cleanupSnapshot(DistributedFileSystem dfs, Path path)
+  static void cleanupSnapshot(DistributedFileSystem dfs, Path path)
       throws IOException {
     if (dfs.exists(new Path(path, HdfsConstants.DOT_SNAPSHOT_DIR))) {
       FileStatus[] status =
@@ -521,6 +556,78 @@ public class DistCpProcedure extends BalanceProcedure {
         deleteSnapshot(dfs, path, s.getPath().getName());
       }
       dfs.disallowSnapshot(path);
+    }
+  }
+
+  interface RunningJobStatus {
+    String getJobID();
+
+    boolean isComplete() throws IOException;
+
+    boolean isSuccessful() throws IOException;
+
+    String getFailureInfo() throws IOException;
+  }
+
+  class YarnRunningJobStatus implements RunningJobStatus {
+
+    RunningJob job;
+
+    public YarnRunningJobStatus(RunningJob job) {
+      this.job = job;
+    }
+
+    @Override
+    public String getJobID() {
+      return job.getID().toString();
+    }
+
+    @Override
+    public boolean isComplete() throws IOException {
+      return job.isComplete();
+    }
+
+    @Override
+    public boolean isSuccessful() throws IOException {
+      return job.isSuccessful();
+    }
+
+    @Override
+    public String getFailureInfo() throws IOException {
+      return job.getFailureInfo();
+    }
+  }
+
+  class LocalJobStatus implements RunningJobStatus {
+
+    Job testJob;
+
+    public LocalJobStatus(Job testJob) {
+      this.testJob = testJob;
+    }
+
+    @Override
+    public String getJobID() {
+      return testJob.getJobID().toString();
+    }
+
+    @Override
+    public boolean isComplete() throws IOException {
+      return testJob.isComplete();
+    }
+
+    @Override
+    public boolean isSuccessful() throws IOException {
+      return testJob.isSuccessful();
+    }
+
+    @Override
+    public String getFailureInfo() throws IOException {
+      try {
+        return testJob.getStatus().getFailureInfo();
+      } catch (InterruptedException e) {
+        throw new IOException(e);
+      }
     }
   }
 }

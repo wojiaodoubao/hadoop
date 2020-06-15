@@ -38,8 +38,8 @@ public final class DistCpBalanceOptions {
           + "taken as a mount point. It will disable write by setting the mount"
           + " point readonly. Otherwise the command works in normal federation"
           + " mode. The source path is taken as the full path. It will disable"
-          + " write by cancelling the execute permission of the source path."
-          + " The default value is `true`.");
+          + " write by cancelling all permissions of the source path. The"
+          + " default value is `true`.");
 
   /**
    * If true, in DIFF_DISTCP stage it will force close all open files when

@@ -21,7 +21,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
-import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
@@ -32,8 +31,6 @@ import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.tools.procedure.BalanceJob;
 import org.apache.hadoop.tools.procedure.BalanceProcedure.RetryException;
 import org.apache.hadoop.tools.procedure.BalanceProcedureScheduler;
-import org.apache.hadoop.mapreduce.MRJobConfig;
-import org.apache.hadoop.mapreduce.v2.MiniMRYarnCluster;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -65,7 +62,6 @@ import static org.junit.Assert.assertNotEquals;
  */
 public class TestDistCpProcedure {
   private static MiniDFSCluster cluster;
-  private static MiniMRYarnCluster mrCluster;
   private static Configuration conf;
   static final String MOUNT = "mock_mount_point";
   private static final String SRCDAT = "srcdat";
@@ -80,18 +76,12 @@ public class TestDistCpProcedure {
 
   @BeforeClass
   public static void beforeClass() throws IOException {
+    DistCpProcedure.ENABLED_FOR_TEST = true;
     conf = new Configuration();
     conf.setLong(DFSConfigKeys.DFS_NAMENODE_MIN_BLOCK_SIZE_KEY, BLOCK_SIZE);
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_SIZE);
     cluster = new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
     cluster.waitActive();
-
-    mrCluster = new MiniMRYarnCluster(TestDistCpProcedure.class.getName(), 3);
-    conf.set(FS_DEFAULT_NAME_KEY, cluster.getFileSystem().getUri().toString());
-    conf.set(MRJobConfig.MR_AM_STAGING_DIR, "/apps_staging_dir");
-    mrCluster.init(conf);
-    mrCluster.start();
-    conf = mrCluster.getConfig();
 
     String workPath =
         "hdfs://" + cluster.getNameNode().getHostAndPort() + "/procedure";
@@ -101,16 +91,14 @@ public class TestDistCpProcedure {
   }
 
   @AfterClass
-  public static void afterClass() throws IOException {
-    if (mrCluster != null) {
-      mrCluster.close();
-    }
+  public static void afterClass() {
+    DistCpProcedure.ENABLED_FOR_TEST = false;
     if (cluster != null) {
       cluster.shutdown();
     }
   }
 
-  @Test(timeout = 180000)
+  @Test(timeout = 6000)
   public void testSuccessfulDistCpProcedure() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -149,9 +137,10 @@ public class TestDistCpProcedure {
         assertEquals(FILE_SIZE, fs.getFileStatus(targetFile).getLen());
       }
     }
+    cleanup(fs, new Path(testRoot));
   }
 
-  @Test(timeout = 180000)
+  @Test(timeout = 5000)
   public void testInitDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -179,9 +168,10 @@ public class TestDistCpProcedure {
     assertTrue(fs.exists(dst));
     // Because we used snapshot, the file should be copied.
     assertTrue(fs.exists(new Path(dst, "a")));
+    cleanup(fs, new Path(testRoot));
   }
 
-  @Test(timeout = 180000)
+  @Test(timeout = 5000)
   public void testDiffDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -215,9 +205,10 @@ public class TestDistCpProcedure {
     executeProcedure(dcProcedure, Stage.FINISH,
         () -> dcProcedure.finalDistCp());
     assertEquals(len, fs.getFileStatus(new Path(dst, "a")).getLen());
+    cleanup(fs, new Path(testRoot));
   }
 
-  @Test(timeout = 180000)
+  @Test(timeout = 5000)
   public void testStageFinalDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -239,9 +230,10 @@ public class TestDistCpProcedure {
     // Verify all the open files have been closed.
     intercept(RemoteException.class, "LeaseExpiredException",
         "Expect RemoteException(LeaseExpiredException).", () -> out.close());
+    cleanup(fs, new Path(testRoot));
   }
 
-  @Test(timeout = 60000)
+  @Test(timeout = 5000)
   public void testStageFinish() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -271,9 +263,10 @@ public class TestDistCpProcedure {
     assertFalse(fs.exists(new Path(dst, HdfsConstants.DOT_SNAPSHOT_DIR)));
     assertEquals(originalPerm, fs.getFileStatus(dst).getPermission());
     assertEquals(0, fs.getFileStatus(src).getPermission().toShort());
+    cleanup(fs, new Path(testRoot));
   }
 
-  @Test(timeout = 180000)
+  @Test(timeout = 5000)
   public void testRecoveryByStage() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -310,9 +303,10 @@ public class TestDistCpProcedure {
         fs.exists(new Path(context.getSrc(), HdfsConstants.DOT_SNAPSHOT_DIR)));
     assertFalse(
         fs.exists(new Path(context.getDst(), HdfsConstants.DOT_SNAPSHOT_DIR)));
+    cleanup(fs, new Path(testRoot));
   }
 
-  @Test(timeout = 180000)
+  @Test(timeout = 5000)
   public void testShutdown() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -334,9 +328,10 @@ public class TestDistCpProcedure {
     long sleep = Math.abs(new Random().nextLong()) % 10000;
     Thread.sleep(sleep);
     scheduler.shutDown();
+    cleanup(fs, new Path(testRoot));
   }
 
-  @Test(timeout = 10000)
+  @Test(timeout = 5000)
   public void testDisableWrite() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -352,7 +347,7 @@ public class TestDistCpProcedure {
     executeProcedure(dcProcedure, Stage.FINAL_DISTCP,
         () -> dcProcedure.disableWrite());
     assertEquals(0, fs.getFileStatus(src).getPermission().toShort());
-    fs.delete(new Path(testRoot), true);
+    cleanup(fs, new Path(testRoot));
   }
 
   private FedBalanceContext buildContext(Path src, Path dst, String mount) {
@@ -438,5 +433,14 @@ public class TestDistCpProcedure {
     dcp.readFields(
         new DataInputStream(new ByteArrayInputStream(bao.toByteArray())));
     return dcp;
+  }
+
+  private void cleanup(DistributedFileSystem dfs, Path root)
+      throws IOException {
+    Path src = new Path(root, SRCDAT);
+    Path dst = new Path(root, DSTDAT);
+    DistCpProcedure.cleanupSnapshot(dfs, src);
+    DistCpProcedure.cleanupSnapshot(dfs, dst);
+    dfs.delete(root, true);
   }
 }
