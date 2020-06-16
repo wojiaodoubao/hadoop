@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.tools;
+package org.apache.hadoop.tools.fedbalance;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -26,11 +26,11 @@ import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.ipc.RemoteException;
-import org.apache.hadoop.tools.DistCpProcedure.Stage;
+import org.apache.hadoop.tools.fedbalance.DistCpProcedure.Stage;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.tools.procedure.BalanceJob;
-import org.apache.hadoop.tools.procedure.BalanceProcedure.RetryException;
-import org.apache.hadoop.tools.procedure.BalanceProcedureScheduler;
+import org.apache.hadoop.tools.fedbalance.procedure.BalanceJob;
+import org.apache.hadoop.tools.fedbalance.procedure.BalanceProcedure.RetryException;
+import org.apache.hadoop.tools.fedbalance.procedure.BalanceProcedureScheduler;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -46,12 +46,12 @@ import java.net.URI;
 import java.util.Random;
 
 import static junit.framework.TestCase.assertTrue;
-import static org.apache.hadoop.tools.FedBalanceConfigs.SCHEDULER_JOURNAL_URI;
+import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.SCHEDULER_JOURNAL_URI;
 import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
 import static org.apache.hadoop.test.LambdaTestUtils.intercept;
-import static org.apache.hadoop.tools.FedBalanceConfigs.CURRENT_SNAPSHOT_NAME;
-import static org.apache.hadoop.tools.FedBalanceConfigs.LAST_SNAPSHOT_NAME;
-import static org.apache.hadoop.tools.FedBalanceConfigs.TrashOption;
+import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.CURRENT_SNAPSHOT_NAME;
+import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.LAST_SNAPSHOT_NAME;
+import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.TrashOption;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertEquals;
@@ -76,7 +76,7 @@ public class TestDistCpProcedure {
 
   @BeforeClass
   public static void beforeClass() throws IOException {
-    DistCpProcedure.ENABLED_FOR_TEST = true;
+    DistCpProcedure.enabledForTest = true;
     conf = new Configuration();
     conf.setLong(DFSConfigKeys.DFS_NAMENODE_MIN_BLOCK_SIZE_KEY, BLOCK_SIZE);
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_SIZE);
@@ -92,13 +92,13 @@ public class TestDistCpProcedure {
 
   @AfterClass
   public static void afterClass() {
-    DistCpProcedure.ENABLED_FOR_TEST = false;
+    DistCpProcedure.enabledForTest = false;
     if (cluster != null) {
       cluster.shutdown();
     }
   }
 
-  @Test(timeout = 6000)
+  @Test(timeout = 30000)
   public void testSuccessfulDistCpProcedure() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -140,7 +140,7 @@ public class TestDistCpProcedure {
     cleanup(fs, new Path(testRoot));
   }
 
-  @Test(timeout = 5000)
+  @Test(timeout = 30000)
   public void testInitDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -171,7 +171,7 @@ public class TestDistCpProcedure {
     cleanup(fs, new Path(testRoot));
   }
 
-  @Test(timeout = 5000)
+  @Test(timeout = 30000)
   public void testDiffDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -208,7 +208,7 @@ public class TestDistCpProcedure {
     cleanup(fs, new Path(testRoot));
   }
 
-  @Test(timeout = 5000)
+  @Test(timeout = 30000)
   public void testStageFinalDistCp() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -233,7 +233,7 @@ public class TestDistCpProcedure {
     cleanup(fs, new Path(testRoot));
   }
 
-  @Test(timeout = 5000)
+  @Test(timeout = 30000)
   public void testStageFinish() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -266,7 +266,7 @@ public class TestDistCpProcedure {
     cleanup(fs, new Path(testRoot));
   }
 
-  @Test(timeout = 5000)
+  @Test(timeout = 30000)
   public void testRecoveryByStage() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -306,7 +306,7 @@ public class TestDistCpProcedure {
     cleanup(fs, new Path(testRoot));
   }
 
-  @Test(timeout = 5000)
+  @Test(timeout = 30000)
   public void testShutdown() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =
@@ -331,7 +331,7 @@ public class TestDistCpProcedure {
     cleanup(fs, new Path(testRoot));
   }
 
-  @Test(timeout = 5000)
+  @Test(timeout = 30000)
   public void testDisableWrite() throws Exception {
     String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
     DistributedFileSystem fs =

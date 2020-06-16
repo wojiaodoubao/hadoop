@@ -30,7 +30,7 @@ if ! declare -f hadoop_subcommand_fedbalance >/dev/null 2>/dev/null; then
 function hadoop_subcommand_fedbalance
 {
   # shellcheck disable=SC2034
-  HADOOP_CLASSNAME=org.apache.hadoop.tools.FedBalance
+  HADOOP_CLASSNAME=org.apache.hadoop.tools.fedbalance.FedBalance
   hadoop_add_to_classpath_tools hadoop-distcp
   hadoop_add_to_classpath_tools hadoop-federation-balance
 }

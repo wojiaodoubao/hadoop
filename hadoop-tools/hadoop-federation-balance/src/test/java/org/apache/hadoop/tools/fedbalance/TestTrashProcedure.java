@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.tools;
+package org.apache.hadoop.tools.fedbalance;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -32,7 +32,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 
-import static org.apache.hadoop.tools.FedBalanceConfigs.TrashOption;
+import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.TrashOption;
 import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;

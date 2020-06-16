@@ -15,20 +15,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.tools;
+package org.apache.hadoop.tools.fedbalance;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
-import org.apache.hadoop.tools.procedure.BalanceProcedure;
+import org.apache.hadoop.tools.fedbalance.procedure.BalanceProcedure;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
-import org.apache.hadoop.tools.FedBalanceConfigs.TrashOption;
+import org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.TrashOption;
 
 /**
  * This procedure moves the source path to the corresponding trash.

@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.tools;
+package org.apache.hadoop.tools.fedbalance;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
@@ -31,7 +31,9 @@ import org.apache.hadoop.hdfs.protocol.OpenFilesIterator.OpenFilesType;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.hdfs.protocol.proto.AclProtos;
 import org.apache.hadoop.hdfs.protocolPB.PBHelperClient;
-import org.apache.hadoop.tools.procedure.BalanceProcedure;
+import org.apache.hadoop.tools.DistCp;
+import org.apache.hadoop.tools.OptionsParser;
+import org.apache.hadoop.tools.fedbalance.procedure.BalanceProcedure;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobID;
@@ -50,8 +52,8 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 
-import static org.apache.hadoop.tools.FedBalanceConfigs.CURRENT_SNAPSHOT_NAME;
-import static org.apache.hadoop.tools.FedBalanceConfigs.LAST_SNAPSHOT_NAME;
+import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.CURRENT_SNAPSHOT_NAME;
+import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.LAST_SNAPSHOT_NAME;
 
 /**
  * Copy data through distcp. Super user privilege needed.
@@ -106,7 +108,7 @@ public class DistCpProcedure extends BalanceProcedure {
    * Enable test mode. Use LocalJobRunner to run the distcp jobs.
    */
   @VisibleForTesting
-  static boolean ENABLED_FOR_TEST = false;
+  static boolean enabledForTest = false;
 
   public DistCpProcedure() {
   }
@@ -394,7 +396,7 @@ public class DistCpProcedure extends BalanceProcedure {
 
   private RunningJobStatus getCurrentJob() throws IOException {
     if (jobId != null) {
-      if (ENABLED_FOR_TEST) {
+      if (enabledForTest) {
         return getCurrentLocalJob();
       } else {
         RunningJob latestJob = client.getJob(JobID.forName(jobId));
@@ -460,7 +462,7 @@ public class DistCpProcedure extends BalanceProcedure {
           OptionsParser.parse(command.toArray(new String[]{})));
       Job job = distCp.createAndSubmitJob();
       LOG.info("Submit distcp job={}", job);
-      if (ENABLED_FOR_TEST) {
+      if (enabledForTest) {
         localJob = job;
       }
       return job.getJobID().toString();
@@ -569,11 +571,11 @@ public class DistCpProcedure extends BalanceProcedure {
     String getFailureInfo() throws IOException;
   }
 
-  class YarnRunningJobStatus implements RunningJobStatus {
+  private static class YarnRunningJobStatus implements RunningJobStatus {
 
-    RunningJob job;
+    private final RunningJob job;
 
-    public YarnRunningJobStatus(RunningJob job) {
+    YarnRunningJobStatus(RunningJob job) {
       this.job = job;
     }
 
@@ -598,11 +600,11 @@ public class DistCpProcedure extends BalanceProcedure {
     }
   }
 
-  class LocalJobStatus implements RunningJobStatus {
+  private static class LocalJobStatus implements RunningJobStatus {
 
-    Job testJob;
+    private final Job testJob;
 
-    public LocalJobStatus(Job testJob) {
+    LocalJobStatus(Job testJob) {
       this.testJob = testJob;
     }
 

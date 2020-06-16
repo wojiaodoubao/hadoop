@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.tools;
+package org.apache.hadoop.tools.fedbalance;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -26,13 +26,13 @@ import org.apache.hadoop.conf.Configured;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
-import org.apache.hadoop.tools.procedure.BalanceProcedure;
+import org.apache.hadoop.tools.fedbalance.procedure.BalanceProcedure;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
 import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
 import org.apache.hadoop.hdfs.server.federation.router.RouterClient;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
-import org.apache.hadoop.tools.procedure.BalanceJob;
-import org.apache.hadoop.tools.procedure.BalanceProcedureScheduler;
+import org.apache.hadoop.tools.fedbalance.procedure.BalanceJob;
+import org.apache.hadoop.tools.fedbalance.procedure.BalanceProcedureScheduler;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Tool;
@@ -45,15 +45,15 @@ import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 
-import static org.apache.hadoop.tools.DistCpBalanceOptions.ROUTER;
-import static org.apache.hadoop.tools.DistCpBalanceOptions.FORCE_CLOSE_OPEN;
-import static org.apache.hadoop.tools.DistCpBalanceOptions.MAP;
-import static org.apache.hadoop.tools.DistCpBalanceOptions.BANDWIDTH;
-import static org.apache.hadoop.tools.DistCpBalanceOptions.TRASH;
-import static org.apache.hadoop.tools.DistCpBalanceOptions.DELAY_DURATION;
-import static org.apache.hadoop.tools.DistCpBalanceOptions.CLI_OPTIONS;
-import static org.apache.hadoop.tools.FedBalanceConfigs.FEDERATION_BALANCE_CLASS;
-import static org.apache.hadoop.tools.FedBalanceConfigs.TrashOption;
+import static org.apache.hadoop.tools.fedbalance.DistCpBalanceOptions.ROUTER;
+import static org.apache.hadoop.tools.fedbalance.DistCpBalanceOptions.FORCE_CLOSE_OPEN;
+import static org.apache.hadoop.tools.fedbalance.DistCpBalanceOptions.MAP;
+import static org.apache.hadoop.tools.fedbalance.DistCpBalanceOptions.BANDWIDTH;
+import static org.apache.hadoop.tools.fedbalance.DistCpBalanceOptions.TRASH;
+import static org.apache.hadoop.tools.fedbalance.DistCpBalanceOptions.DELAY_DURATION;
+import static org.apache.hadoop.tools.fedbalance.DistCpBalanceOptions.CLI_OPTIONS;
+import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.FEDERATION_BALANCE_CLASS;
+import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.TrashOption;
 
 /**
  * Balance data from src cluster to dst cluster with distcp.

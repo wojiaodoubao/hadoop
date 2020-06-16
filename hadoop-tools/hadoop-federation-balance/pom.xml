@@ -209,7 +209,7 @@
         <configuration>
           <archive>
             <manifest>
-              <mainClass>org.apache.hadoop.tools.FedBalance</mainClass>
+              <mainClass>org.apache.hadoop.tools.fedbalance.FedBalance</mainClass>
             </manifest>
           </archive>
         </configuration>
