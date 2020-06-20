@@ -25,7 +25,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.tools.fedbalance.procedure.BalanceProcedure;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
 import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
@@ -72,6 +71,9 @@ public class FedBalance extends Configured implements Tool {
   private static final String DISTCP_PROCEDURE = "distcp-procedure";
   private static final String MOUNT_TABLE_PROCEDURE = "mount-table-procedure";
   private static final String TRASH_PROCEDURE = "trash-procedure";
+
+  private static final String FED_BALANCE_DEFAULT_XML = "fedbalance-default.xml";
+  private static final String FED_BALANCE_SITE_XML = "fedbalance-site.xml";
 
   /**
    * This class helps building the balance job.
@@ -356,12 +358,25 @@ public class FedBalance extends Configured implements Tool {
   }
 
   /**
+   * Loads properties from fedbalance-default.xml into configuration object.
+   *
+   * @return Configuration which includes properties from fedbalance-default.xml
+   *         and fedbalance-site.xml
+   */
+  private static Configuration getDefaultConf() {
+    Configuration config = new Configuration();
+    config.addResource(FED_BALANCE_DEFAULT_XML);
+    config.addResource(FED_BALANCE_SITE_XML);
+    return config;
+  }
+
+  /**
    * Main function of the FedBalance program. Parses the input arguments and
    * invokes the FedBalance::run() method, via the ToolRunner.
    * @param argv Command-line arguments sent to FedBalance.
    */
   public static void main(String[] argv) {
-    Configuration conf = new HdfsConfiguration();
+    Configuration conf = getDefaultConf();
     Class<Tool> balanceClazz = (Class<Tool>) conf
         .getClass(FEDERATION_BALANCE_CLASS, FedBalance.class);
     Tool balancer = ReflectionUtils.newInstance(balanceClazz, conf);
