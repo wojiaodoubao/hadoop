@@ -20,19 +20,13 @@
 <configuration>
 
     <property>
-        <name>federation.balance.class</name>
-        <value>org.apache.hadoop.tools.fedbalance.FedBalance</value>
-        <description>The class used for federation balance</description>
-    </property>
-
-    <property>
-        <name>hadoop.hdfs.procedure.scheduler.journal.uri</name>
+        <name>hdfs.fedbalance.procedure.scheduler.journal.uri</name>
         <value>hdfs://localhost:8020/tmp/procedure</value>
         <description>The uri of the journal</description>
     </property>
 
     <property>
-        <name>hadoop.hdfs.procedure.work.thread.num</name>
+        <name>hdfs.fedbalance.procedure.work.thread.num</name>
         <value>10</value>
         <description>The worker threads number of the BalanceProcedureScheduler</description>
     </property>
