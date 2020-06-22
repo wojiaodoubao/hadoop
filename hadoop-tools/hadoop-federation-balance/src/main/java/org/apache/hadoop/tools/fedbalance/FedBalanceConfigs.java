@@ -32,11 +32,14 @@ public final class FedBalanceConfigs {
     TRASH, DELETE, SKIP
   }
 
-  /* The worker threads number of the BalanceProcedureScheduler */
+  /* The worker threads number of the BalanceProcedureScheduler.
+   BalanceProcedureScheduler is responsible for scheduling a balance job,
+   including submit, run, delay and recover. */
   public static final String WORK_THREAD_NUM =
       "hdfs.fedbalance.procedure.work.thread.num";
   public static final int WORK_THREAD_NUM_DEFAULT = 10;
-  /* The uri of the journal */
+  /* The uri of the journal, the journal file is used for handling the job
+   persistence and recover. */
   public static final String SCHEDULER_JOURNAL_URI =
       "hdfs.fedbalance.procedure.scheduler.journal.uri";
   public static final String JOB_PREFIX = "JOB-";

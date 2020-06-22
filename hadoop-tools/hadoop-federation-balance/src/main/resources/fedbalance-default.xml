@@ -22,13 +22,20 @@
     <property>
         <name>hdfs.fedbalance.procedure.scheduler.journal.uri</name>
         <value>hdfs://localhost:8020/tmp/procedure</value>
-        <description>The uri of the journal</description>
+        <description>
+            The uri of the journal, the journal file is used for handling the
+            job persistence and recover.
+        </description>
     </property>
 
     <property>
         <name>hdfs.fedbalance.procedure.work.thread.num</name>
         <value>10</value>
-        <description>The worker threads number of the BalanceProcedureScheduler</description>
+        <description>
+            The worker threads number of the BalanceProcedureScheduler.
+            BalanceProcedureScheduler is responsible for scheduling a balance
+            job, including submit, run, delay and recover.
+        </description>
     </property>
 
 </configuration>
