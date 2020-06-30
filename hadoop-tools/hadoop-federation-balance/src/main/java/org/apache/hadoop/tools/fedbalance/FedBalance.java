@@ -72,8 +72,8 @@ public class FedBalance extends Configured implements Tool {
   private static final String TRASH_PROCEDURE = "trash-procedure";
 
   private static final String FED_BALANCE_DEFAULT_XML =
-      "fedbalance-default.xml";
-  private static final String FED_BALANCE_SITE_XML = "fedbalance-site.xml";
+      "hdfs-fedbalance-default.xml";
+  private static final String FED_BALANCE_SITE_XML = "hdfs-fedbalance-site.xml";
 
   /**
    * This class helps building the balance job.
@@ -358,10 +358,11 @@ public class FedBalance extends Configured implements Tool {
   }
 
   /**
-   * Loads properties from fedbalance-default.xml into configuration object.
+   * Loads properties from hdfs-fedbalance-default.xml into configuration
+   * object.
    *
-   * @return Configuration which includes properties from fedbalance-default.xml
-   *         and fedbalance-site.xml
+   * @return Configuration which includes properties from
+   *         hdfs-fedbalance-default.xml and hdfs-fedbalance-site.xml
    */
   @VisibleForTesting
   static Configuration getDefaultConf() {
