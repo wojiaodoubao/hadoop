@@ -63,6 +63,11 @@ public class TestCallQueueManager {
       return priorityLevel;
     }
 
+    @Override
+    public String getMethodName() {
+      return null;
+    }
+
     public void setPriorityLevel(int level) {
       this.priorityLevel = level;
     }
@@ -388,6 +393,11 @@ public class TestCallQueueManager {
     @Override
     public int getPriorityLevel() {
       return 0;
+    }
+
+    @Override
+    public String getMethodName() {
+      return null;
     }
   }
 

@@ -49,6 +49,11 @@ public class TestIdentityProviders {
     public int getPriorityLevel() {
       return 0;
     }
+
+    @Override
+    public String getMethodName() {
+      return null;
+    }
   }
 
   @Test

@@ -30,4 +30,5 @@ public interface Schedulable {
   public UserGroupInformation getUserGroupInformation();
 
   int getPriorityLevel();
+  String getMethodName();
 }

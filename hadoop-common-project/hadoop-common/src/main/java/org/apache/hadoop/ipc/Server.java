@@ -91,6 +91,8 @@ import org.apache.hadoop.ipc.RPC.VersionMismatch;
 import org.apache.hadoop.ipc.metrics.RpcDetailedMetrics;
 import org.apache.hadoop.ipc.metrics.RpcMetrics;
 import org.apache.hadoop.ipc.protobuf.IpcConnectionContextProtos.IpcConnectionContextProto;
+import org.apache.hadoop.ipc.protobuf.ProtobufRpcEngine2Protos;
+import org.apache.hadoop.ipc.protobuf.ProtobufRpcEngineProtos;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcKindProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcRequestHeaderProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcResponseHeaderProto;
@@ -772,6 +774,8 @@ public abstract class Server {
     private final CallerContext callerContext; // the call context
     private boolean deferredResponse = false;
     private int priorityLevel;
+    private String methodName;
+    private UserGroupInformation ugi;
     // the priority level assigned by scheduler, 0 by default
     private long clientStateId;
     private boolean isCallCoordinated;
@@ -843,7 +847,7 @@ public abstract class Server {
     }
     // should eventually be abstract but need to avoid breaking tests
     public UserGroupInformation getRemoteUser() {
-      return null;
+      return ugi;
     }
     public InetAddress getHostInetAddress() {
       return null;
@@ -907,8 +911,21 @@ public abstract class Server {
       return this.priorityLevel;
     }
 
+    @Override
+    public String getMethodName() {
+      return methodName;
+    }
+
+    public void setUserGroupInformation(UserGroupInformation ugi) {
+      this.ugi = ugi;
+    }
+
     public void setPriorityLevel(int priorityLevel) {
       this.priorityLevel = priorityLevel;
+    }
+
+    public void setMethodName(String methodName) {
+      this.methodName = methodName;
     }
 
     public long getClientStateId() {
@@ -2688,8 +2705,16 @@ public abstract class Server {
           ProtoUtil.convert(header.getRpcKind()),
           header.getClientId().toByteArray(), traceScope, callerContext);
 
+      // Save the remote ugi to scheduler.
+      call.setUserGroupInformation(call.getRemoteUser());
       // Save the priority level assignment by the scheduler
       call.setPriorityLevel(callQueue.getPriorityLevel(call));
+      // Save the method name to the scheduler.
+      ProtobufRpcEngine2Protos.RequestHeaderProto headerProto = getHeader(call);
+      if (headerProto != null) {
+        call.setMethodName(headerProto.getMethodName());
+      }
+
       call.markCallCoordinated(false);
       if(alignmentContext != null && call.rpcRequest != null &&
           (call.rpcRequest instanceof ProtobufRpcEngine2.RpcProtobufRequest)) {
@@ -2697,13 +2722,9 @@ public abstract class Server {
         // step and treat the call as uncoordinated. As currently only certain
         // ClientProtocol methods request made through RPC protobuf needs to be
         // coordinated.
-        String methodName;
-        String protoName;
-        ProtobufRpcEngine2.RpcProtobufRequest req =
-            (ProtobufRpcEngine2.RpcProtobufRequest) call.rpcRequest;
+        String methodName = headerProto.getMethodName();
+        String protoName = headerProto.getDeclaringClassProtocolName();
         try {
-          methodName = req.getRequestHeader().getMethodName();
-          protoName = req.getRequestHeader().getDeclaringClassProtocolName();
           if (alignmentContext.isCoordinatedCall(protoName, methodName)) {
             call.markCallCoordinated(true);
             long stateId;
@@ -2725,6 +2746,21 @@ public abstract class Server {
             RpcErrorCodeProto.ERROR_RPC_SERVER, ioe);
       }
       incRpcCount();  // Increment the rpc count
+    }
+
+    // Extract header from rpc call.
+    private ProtobufRpcEngine2Protos.RequestHeaderProto getHeader(RpcCall call)
+        throws RpcServerException {
+      if (call.rpcRequest instanceof ProtobufRpcEngine2.RpcProtobufRequest) {
+        ProtobufRpcEngine2.RpcProtobufRequest req =
+            (ProtobufRpcEngine2.RpcProtobufRequest) call.rpcRequest;
+        try {
+          return req.getRequestHeader();
+        } catch (IOException ioe) {
+          throw new RpcServerException("Processing RPC request caught ", ioe);
+        }
+      }
+      return null;
     }
 
     /**
