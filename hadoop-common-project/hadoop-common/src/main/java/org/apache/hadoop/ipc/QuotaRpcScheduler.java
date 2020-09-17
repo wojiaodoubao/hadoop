@@ -121,13 +121,6 @@ public class QuotaRpcScheduler implements RpcScheduler {
     loadQuotaMap(conf);
   }
 
-  /**
-   * Reload rpc quota from configuration file.
-   */
-  public void refreshQuota() {
-    loadQuotaMap(new Configuration());
-  }
-
   private void loadQuotaMap(Configuration conf) {
     Map<QuotaKey, Quota> newMap = new HashMap<>();
     String quotaStr = conf.get(HDFS_NAMENODE_RPC_QUOTA_KEY);
