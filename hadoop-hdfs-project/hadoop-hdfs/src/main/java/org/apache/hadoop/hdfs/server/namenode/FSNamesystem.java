@@ -8582,6 +8582,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   @VisibleForTesting
   static class FSNamesystemAuditLogger extends DefaultAuditLogger {
 
+    /** Reduce audit logs by skipping the null fields. */
+    private boolean enableLogReduce = false;
+
     @Override
     public void initialize(Configuration conf) {
       isCallerContextEnabled = conf.getBoolean(
@@ -8599,6 +8602,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
       debugCmdSet.addAll(Arrays.asList(conf.getTrimmedStrings(
           DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_DEBUG_CMDLIST)));
+      enableLogReduce =
+          conf.getBoolean(DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_REDUCE_LOGS,
+              DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_REDUCE_LOGS_DEFAULT);
     }
 
     @Override
@@ -8609,26 +8615,19 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
       if (auditLog.isDebugEnabled() ||
           (auditLog.isInfoEnabled() && !debugCmdSet.contains(cmd))) {
-        final StringBuilder sb = STRING_BUILDER.get();
+        AuditLogBuilder builder = new AuditLogBuilder();
         src = escapeJava(src);
         dst = escapeJava(dst);
-        sb.setLength(0);
-        sb.append("allowed=").append(succeeded).append("\t")
-            .append("ugi=").append(userName).append("\t")
-            .append("ip=").append(addr).append("\t")
-            .append("cmd=").append(cmd).append("\t")
-            .append("src=").append(src).append("\t")
-            .append("dst=").append(dst).append("\t");
+        builder.appendKV("allowed", succeeded).appendKV("ugi", userName)
+            .appendKV("ip", addr).appendKV("cmd", cmd).appendKV("src", src)
+            .appendKV("dst", dst);
         if (null == status) {
-          sb.append("perm=null");
+          builder.appendKV("perm", null);
         } else {
-          sb.append("perm=")
-              .append(status.getOwner()).append(":")
-              .append(status.getGroup()).append(":")
-              .append(status.getPermission());
+          builder.appendKV("perm", status.getOwner(), ":", status.getGroup(), ":",
+              status.getPermission());
         }
         if (logTokenTrackingId) {
-          sb.append("\t").append("trackingId=");
           String trackingId = null;
           if (ugi != null && dtSecretManager != null
               && ugi.getAuthenticationMethod() == AuthenticationMethod.TOKEN) {
@@ -8641,29 +8640,28 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
               }
             }
           }
-          sb.append(trackingId);
+          builder.appendKV("trackingId", trackingId);
         }
-        sb.append("\t").append("proto=")
-            .append(Server.getProtocol());
+        builder.appendKV("proto", Server.getProtocol());
         if (isCallerContextEnabled &&
             callerContext != null &&
             callerContext.isContextValid()) {
-          sb.append("\t").append("callerContext=");
+          builder.append("callerContext=");
           if (callerContext.getContext().length() > callerContextMaxLen) {
-            sb.append(callerContext.getContext().substring(0,
+            builder.append(callerContext.getContext().substring(0,
                 callerContextMaxLen));
           } else {
-            sb.append(callerContext.getContext());
+            builder.append(callerContext.getContext());
           }
           if (callerContext.getSignature() != null &&
               callerContext.getSignature().length > 0 &&
               callerContext.getSignature().length <= callerSignatureMaxLen) {
-            sb.append(":")
+            builder.append(":")
                 .append(new String(callerContext.getSignature(),
-                CallerContext.SIGNATURE_ENCODING));
+                    CallerContext.SIGNATURE_ENCODING));
           }
         }
-        logAuditMessage(sb.toString());
+        logAuditMessage(builder.toString());
       }
     }
 
@@ -8678,6 +8676,62 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
     public void logAuditMessage(String message) {
       auditLog.info(message);
+    }
+
+    /**
+     * Build audit log message. Audit log is combined with k-v pairs that
+     * separated by '\t'.
+     */
+    @VisibleForTesting
+    class AuditLogBuilder {
+      StringBuilder sb;
+
+      AuditLogBuilder() {
+        sb = STRING_BUILDER.get();
+        sb.setLength(0);
+      }
+
+      /**
+       * Append msg directly at the end of the audit log message.
+       * 
+       * @param msg the message to be appended.
+       */
+      AuditLogBuilder append(String msg) {
+        sb.append(msg);
+        return this;
+      }
+
+      /**
+       * Append key-value pair to audit log message.
+       *
+       * @param key the key of k-v pair.
+       * @param values the value of k-v pair.
+       */
+      AuditLogBuilder appendKV(String key, Object... values) {
+        if (key == null) {
+          return this;
+        }
+        if (values != null) {
+          sb.append(key).append("=");
+          for (Object value : values) {
+            sb.append(value == null ? "null" : value);
+          }
+          sb.append("\t");
+        } else if (!enableLogReduce) {
+          sb.append(key).append("=").append("null").append("\t");
+        }
+        return this;
+      }
+
+      @Override
+      public String toString() {
+        int len = sb.length();
+        if (len > 0 && sb.charAt(len - 1) == '\t') {
+          return sb.substring(0, len-1);
+        } else {
+          return sb.toString();
+        }
+      }
     }
   }
 
