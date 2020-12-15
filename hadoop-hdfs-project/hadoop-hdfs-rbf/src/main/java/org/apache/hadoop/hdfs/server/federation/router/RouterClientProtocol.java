@@ -20,6 +20,17 @@ package org.apache.hadoop.hdfs.server.federation.router;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SERVER_DEFAULTS_VALIDITY_PERIOD_MS_DEFAULT;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SERVER_DEFAULTS_VALIDITY_PERIOD_MS_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.FederationUtil.updateMountPointStatus;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_FORCE_CLOSE_OPEN_FILE;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_FORCE_CLOSE_OPEN_FILE_DEFAULT;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_MAP;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_BANDWIDTH;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_DELAY;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_DELAY_DEFAULT;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_DIFF;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_DIFF_DEFAULT;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_TRASH;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_TRASH_DEFAULT;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.crypto.CryptoProtocolVersion;
 import org.apache.hadoop.fs.BatchedRemoteIterator.BatchedEntries;
@@ -93,6 +104,10 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.net.ConnectTimeoutException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.tools.fedbalance.FedBalance;
+import org.apache.hadoop.tools.fedbalance.FedBalanceConfigs;
+import org.apache.hadoop.tools.fedbalance.procedure.BalanceJob;
+import org.apache.hadoop.tools.fedbalance.procedure.BalanceProcedureScheduler;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -128,6 +143,7 @@ public class RouterClientProtocol implements ClientProtocol {
   private final RouterRpcClient rpcClient;
   private final FileSubclusterResolver subclusterResolver;
   private final ActiveNamenodeResolver namenodeResolver;
+  private final Configuration conf;
 
   /**
    * Caching server defaults so as to prevent redundant calls to namenode,
@@ -191,6 +207,7 @@ public class RouterClientProtocol implements ClientProtocol {
     this.snapshotProto = new RouterSnapshot(rpcServer);
     this.routerCacheAdmin = new RouterCacheAdmin(rpcServer);
     this.securityManager = rpcServer.getRouterSecurityManager();
+    this.conf = rpcServer.getConfig();
   }
 
   @Override
@@ -594,13 +611,13 @@ public class RouterClientProtocol implements ClientProtocol {
 
     final List<RemoteLocation> srcLocations =
         rpcServer.getLocationsForPath(src, true, false);
+    final List<RemoteLocation> dstLocations =
+        rpcServer.getLocationsForPath(dst, false, false);
     // srcLocations may be trimmed by getRenameDestinations()
     final List<RemoteLocation> locs = new LinkedList<>(srcLocations);
-    RemoteParam dstParam = getRenameDestinations(locs, dst);
+    RemoteParam dstParam = getRenameDestinations(locs, dstLocations);
     if (locs.isEmpty()) {
-      throw new IOException(
-          "Rename of " + src + " to " + dst + " is not allowed," +
-              " no eligible destination in the same namespace was found.");
+      renameAcrossNamespace(src, dst, srcLocations, dstLocations);
     }
     RemoteMethod method = new RemoteMethod("rename",
         new Class<?>[] {String.class, String.class},
@@ -620,9 +637,11 @@ public class RouterClientProtocol implements ClientProtocol {
 
     final List<RemoteLocation> srcLocations =
         rpcServer.getLocationsForPath(src, true, false);
+    final List<RemoteLocation> dstLocations =
+        rpcServer.getLocationsForPath(dst, false, false);
     // srcLocations may be trimmed by getRenameDestinations()
     final List<RemoteLocation> locs = new LinkedList<>(srcLocations);
-    RemoteParam dstParam = getRenameDestinations(locs, dst);
+    RemoteParam dstParam = getRenameDestinations(locs, dstLocations);
     if (locs.isEmpty()) {
       throw new IOException(
           "Rename of " + src + " to " + dst + " is not allowed," +
@@ -1821,11 +1840,9 @@ public class RouterClientProtocol implements ClientProtocol {
    * @throws IOException If the dst paths could not be determined.
    */
   private RemoteParam getRenameDestinations(
-      final List<RemoteLocation> srcLocations, final String dst)
-      throws IOException {
+      final List<RemoteLocation> srcLocations,
+      final List<RemoteLocation> dstLocations) throws IOException {
 
-    final List<RemoteLocation> dstLocations =
-        rpcServer.getLocationsForPath(dst, false, false);
     final Map<RemoteLocation, String> dstMap = new HashMap<>();
 
     Iterator<RemoteLocation> iterator = srcLocations.iterator();
@@ -1842,6 +1859,61 @@ public class RouterClientProtocol implements ClientProtocol {
       }
     }
     return new RemoteParam(dstMap);
+  }
+
+  private void renameAcrossNamespace(final String src, final String dst,
+      final List<RemoteLocation> srcLocations,
+      final List<RemoteLocation> dstLocations) throws IOException {
+    if (!rpcServer.enableRenameAcrossNamespace()) {
+      throw new IOException("Rename of " + src + " to " + dst
+          + " is not allowed, no eligible destination in the same namespace was"
+          + " found");
+    }
+    if (srcLocations.size() != 1 || dstLocations.size() != 1) {
+      throw new IOException("Rename of " + src + " to " + dst + " is not"
+          + " allowed. The remote location should be exactly one.");
+    }
+    RemoteLocation srcLoc = srcLocations.get(0);
+    RemoteLocation dstLoc = dstLocations.get(0);
+    if (srcLoc.getNameserviceId().equals(dstLoc.getNameserviceId())) {
+      throw new IOException(
+          "Rename of " + src + " to " + dst + " are at the same namespace.");
+    }
+    // Build and submit federation balance job.
+    FedBalance.Builder builder = new FedBalance.Builder(src, dst, conf);
+    boolean forceCloseOpenFiles =
+        conf.getBoolean(DFS_ROUTER_FEDERATION_RENAME_FORCE_CLOSE_OPEN_FILE,
+            DFS_ROUTER_FEDERATION_RENAME_FORCE_CLOSE_OPEN_FILE_DEFAULT);
+    int map = conf.getInt(DFS_ROUTER_FEDERATION_RENAME_MAP, -1);
+    int bandwidth = conf.getInt(DFS_ROUTER_FEDERATION_RENAME_BANDWIDTH, -1);
+    long delay = conf.getLong(DFS_ROUTER_FEDERATION_RENAME_DELAY,
+        DFS_ROUTER_FEDERATION_RENAME_DELAY_DEFAULT);
+    int diff = conf.getInt(DFS_ROUTER_FEDERATION_RENAME_DIFF,
+        DFS_ROUTER_FEDERATION_RENAME_DIFF_DEFAULT);
+    String trashPolicy = conf.get(DFS_ROUTER_FEDERATION_RENAME_TRASH,
+        DFS_ROUTER_FEDERATION_RENAME_TRASH_DEFAULT);
+    if (map < 0 || bandwidth < 0 || delay < 0 || diff < 0) {
+      throw new IOException("Unexpected negative value. map=" + map
+          + " bandwidth=" + bandwidth + " delay=" + delay + " diff=" + diff);
+    }
+    builder.setRouterCluster(true);
+    builder.setForceCloseOpen(forceCloseOpenFiles);
+    builder.setMap(map);
+    builder.setBandWidth(bandwidth);
+    builder.setDelayDuration(delay);
+    builder.setDiffThreshold(diff);
+    if (trashPolicy.equalsIgnoreCase("skip")) {
+      builder.setTrashOpt(FedBalanceConfigs.TrashOption.SKIP);
+    } else if (trashPolicy.equalsIgnoreCase("trash")) {
+      builder.setTrashOpt(FedBalanceConfigs.TrashOption.TRASH);
+    } else if (trashPolicy.equalsIgnoreCase("delete")) {
+      builder.setTrashOpt(FedBalanceConfigs.TrashOption.DELETE);
+    }
+
+    BalanceJob job = builder.build();
+    BalanceProcedureScheduler scheduler = rpcServer.getScheduler();
+    scheduler.submit(job);
+    scheduler.waitUntilDone(job);
   }
 
   /**

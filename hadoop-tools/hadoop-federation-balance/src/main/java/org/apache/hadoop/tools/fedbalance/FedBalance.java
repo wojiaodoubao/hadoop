@@ -70,7 +70,8 @@ public class FedBalance extends Configured implements Tool {
   /**
    * This class helps building the balance job.
    */
-  private class Builder {
+  public static class Builder {
+    private Configuration conf;
     /* Force close all open files while there is no diff. */
     private boolean forceCloseOpen = false;
     /* Max number of concurrent maps to use for copy. */
@@ -88,9 +89,10 @@ public class FedBalance extends Configured implements Tool {
     /* The dst input. This specifies the dst path. */
     private final String inputDst;
 
-    Builder(String inputSrc, String inputDst) {
+    public Builder(String inputSrc, String inputDst, Configuration conf) {
       this.inputSrc = inputSrc;
       this.inputDst = inputDst;
+      this.conf = conf;
     }
 
     /**
@@ -250,7 +252,7 @@ public class FedBalance extends Configured implements Tool {
    */
   private int submit(CommandLine command, String inputSrc, String inputDst)
       throws IOException {
-    Builder builder = new Builder(inputSrc, inputDst);
+    Builder builder = new Builder(inputSrc, inputDst, getConf());
     // parse options.
     builder.setForceCloseOpen(command.hasOption(FORCE_CLOSE_OPEN.getOpt()));
     if (command.hasOption(MAP.getOpt())) {
