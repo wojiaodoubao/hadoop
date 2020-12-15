@@ -18,16 +18,7 @@
 package org.apache.hadoop.hdfs.server.federation.router;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHORIZATION;
-import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_DEFAULT;
-import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_KEY;
-import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_QUEUE_SIZE_DEFAULT;
-import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_QUEUE_SIZE_KEY;
-import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_READER_COUNT_DEFAULT;
-import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_READER_COUNT_KEY;
-import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_READER_QUEUE_SIZE_DEFAULT;
-import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_READER_QUEUE_SIZE_KEY;
-import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DN_REPORT_CACHE_EXPIRE;
-import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DN_REPORT_CACHE_EXPIRE_MS_DEFAULT;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.*;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -165,6 +156,7 @@ import org.apache.hadoop.security.protocolPB.RefreshUserMappingsProtocolServerSi
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.tools.GetUserMappingsProtocol;
+import org.apache.hadoop.tools.fedbalance.procedure.BalanceProcedureScheduler;
 import org.apache.hadoop.tools.proto.GetUserMappingsProtocolProtos;
 import org.apache.hadoop.tools.protocolPB.GetUserMappingsProtocolPB;
 import org.apache.hadoop.tools.protocolPB.GetUserMappingsProtocolServerSideTranslatorPB;
@@ -238,6 +230,10 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
   /** DN type -> full DN report. */
   private final LoadingCache<DatanodeReportType, DatanodeInfo[]> dnCache;
 
+  /** Enable router to rename across namespaces using federation balance job. */
+  private final boolean enableRenameAcrossNamespace;
+  /** Schedule the federation balance jobs. */
+  private final BalanceProcedureScheduler scheduler;
   /**
    * Construct a router RPC server.
    *
@@ -397,6 +393,17 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
                 .forEach((key) -> this.dnCache.refresh(key)),
             0,
             dnCacheExpire, TimeUnit.MILLISECONDS);
+
+    // TODO:这里要处理不同router不同working dir的问题
+    enableRenameAcrossNamespace =
+        conf.getBoolean(DFS_ROUTER_FEDERATION_RENAME_ENABLE,
+            DFS_ROUTER_FEDERATION_RENAME_ENABLE_DEFAULT);
+    if (enableRenameAcrossNamespace) {
+      scheduler = new BalanceProcedureScheduler(conf);
+      scheduler.init(true);
+    } else {
+      scheduler = null;
+    }
   }
 
   @Override
@@ -433,6 +440,20 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
       this.securityManager.stop();
     }
     super.serviceStop();
+  }
+
+  @Override
+  public void stop() {
+    super.stop();
+    scheduler.shutDown();
+  }
+
+  boolean enableRenameAcrossNamespace() {
+    return enableRenameAcrossNamespace;
+  }
+
+  BalanceProcedureScheduler getScheduler() {
+    return this.scheduler;
   }
 
   /**
