@@ -643,9 +643,7 @@ public class RouterClientProtocol implements ClientProtocol {
     final List<RemoteLocation> locs = new LinkedList<>(srcLocations);
     RemoteParam dstParam = getRenameDestinations(locs, dstLocations);
     if (locs.isEmpty()) {
-      throw new IOException(
-          "Rename of " + src + " to " + dst + " is not allowed," +
-              " no eligible destination in the same namespace was found.");
+      renameAcrossNamespace(src, dst, srcLocations, dstLocations);
     }
     RemoteMethod method = new RemoteMethod("rename2",
         new Class<?>[] {String.class, String.class, options.getClass()},
@@ -1913,6 +1911,8 @@ public class RouterClientProtocol implements ClientProtocol {
     BalanceJob job = builder.build();
     BalanceProcedureScheduler scheduler = rpcServer.getScheduler();
     scheduler.submit(job);
+    LOG.info("lijinglun:Rename {} to {} from namespace {} to {}. JobId={}.", src, dst,
+        srcLoc.getNameserviceId(), dstLoc.getNameserviceId(), job.getId());
     scheduler.waitUntilDone(job);
   }
 
