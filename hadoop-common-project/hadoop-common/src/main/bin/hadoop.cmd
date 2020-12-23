@@ -248,6 +248,10 @@ call :updatepath %HADOOP_BIN_PATH%
   set CLASS=org.apache.hadoop.tracing.TraceAdmin
   goto :eof
 
+:fedbalance
+  set CLASS=org.apache.hadoop.hdfs.tools.fedbalance.FedBalance
+  goto :eof
+
 :updatepath
   set path_to_add=%*
   set current_path_comparable=%path%
@@ -320,6 +324,7 @@ call :updatepath %HADOOP_BIN_PATH%
   @echo   key                  manage keys via the KeyProvider
   @echo   trace                view and modify Hadoop tracing settings
   @echo   daemonlog            get/set the log level for each daemon
+  @echo   fedbalance           move directories and files across federation namespaces
   @echo  or
   @echo   CLASSNAME            run the class named CLASSNAME
   @echo.
