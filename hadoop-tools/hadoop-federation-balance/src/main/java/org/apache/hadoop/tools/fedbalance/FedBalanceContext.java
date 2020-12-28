@@ -194,7 +194,7 @@ public class FedBalanceContext implements Writable {
     return builder.toString();
   }
 
-  static class Builder {
+  public static class Builder {
     private final Path src;
     private final Path dst;
     private final String mount;
@@ -215,7 +215,7 @@ public class FedBalanceContext implements Writable {
      * @param mount the mount point to be balanced.
      * @param conf the configuration.
      */
-    Builder(Path src, Path dst, String mount, Configuration conf) {
+    public Builder(Path src, Path dst, String mount, Configuration conf) {
       this.src = src;
       this.dst = dst;
       this.mount = mount;

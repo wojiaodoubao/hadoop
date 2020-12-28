@@ -155,7 +155,7 @@ public class DistCpProcedure extends BalanceProcedure {
       diffDistCp();
       return false;
     case DISABLE_WRITE:
-      disableWrite();
+      disableWrite(context);
       return false;
     case FINAL_DISTCP:
       finalDistCp();
@@ -238,21 +238,22 @@ public class DistCpProcedure extends BalanceProcedure {
   }
 
   /**
-   * Disable write either by making the mount entry readonly or cancelling the
-   * execute permission of the source path.
+   * Disable write by cancelling the execute permission of the source path.
    */
-  void disableWrite() throws IOException {
-    if (useMountReadOnly) {
-      String mount = context.getMount();
-      MountTableProcedure.disableWrite(mount, conf);
-    } else {
-      // Save and cancel permission.
-      FileStatus status = srcFs.getFileStatus(src);
-      fPerm = status.getPermission();
-      acl = srcFs.getAclStatus(src);
-      srcFs.setPermission(src, FsPermission.createImmutable((short) 0));
-    }
+  protected void disableWrite(FedBalanceContext context) throws IOException {
+    // Save and cancel permission.
+    FileStatus status = srcFs.getFileStatus(src);
+    fPerm = status.getPermission();
+    acl = srcFs.getAclStatus(src);
+    srcFs.setPermission(src, FsPermission.createImmutable((short) 0));
     updateStage(Stage.FINAL_DISTCP);
+  }
+
+  /**
+   * Enable write.
+   */
+  protected void enableWrite() throws IOException {
+    restorePermission();
   }
 
   /**
@@ -297,9 +298,7 @@ public class DistCpProcedure extends BalanceProcedure {
   }
 
   void finish() throws IOException {
-    if (!useMountReadOnly) {
-      restorePermission();
-    }
+    enableWrite();
     if (srcFs.exists(src)) {
       cleanupSnapshot(srcFs, src);
     }

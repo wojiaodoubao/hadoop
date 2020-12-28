@@ -36,8 +36,10 @@ public class HdfsConfiguration extends Configuration {
     // adds the default resources
     Configuration.addDefaultResource("hdfs-default.xml");
     Configuration.addDefaultResource("hdfs-rbf-default.xml");
+    Configuration.addDefaultResource("hdfs-fedbalance-default.xml");
     Configuration.addDefaultResource("hdfs-site.xml");
     Configuration.addDefaultResource("hdfs-rbf-site.xml");
+    Configuration.addDefaultResource("hdfs-fedbalance-site.xml");
   }
 
   public HdfsConfiguration() {
