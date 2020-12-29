@@ -48,7 +48,7 @@
       <fileMode>0755</fileMode>
     </fileSet>
     <fileSet>
-      <directory>../../hadoop-hdfs-project/hadoop-hdfs-rbf/src/main/shellprofile.d</directory>
+      <directory>../hadoop-federation-balance/src/main/shellprofile.d</directory>
       <includes>
         <include>*</include>
       </includes>
