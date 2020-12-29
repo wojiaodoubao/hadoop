@@ -47,8 +47,7 @@ function hadoop_usage
   hadoop_add_subcommand "trace" client "view and modify Hadoop tracing settings"
   hadoop_add_subcommand "version" client "print the version"
   hadoop_add_subcommand "kdiag" client "Diagnose Kerberos Problems"
-  hadoop_add_subcommand "fedbalance" admin "move directories and files across federation namespaces"
-  hadoop_generate_usage "${HADOOP_SHELL_EXECNAME}"
+  hadoop_generate_usage "${HADOOP_SHELL_EXECNAME}" true
 }
 
 ## @description  Default command handler for hadoop command
@@ -171,10 +170,6 @@ function hadoopcmd_case
     ;;
     version)
       HADOOP_CLASSNAME=org.apache.hadoop.util.VersionInfo
-    ;;
-    fedbalance)
-      HADOOP_CLASSNAME=org.apache.hadoop.hdfs.tools.fedbalance.FedBalance
-      hadoop_add_to_classpath_tools hadoop-distcp
     ;;
     *)
       HADOOP_CLASSNAME="${subcmd}"

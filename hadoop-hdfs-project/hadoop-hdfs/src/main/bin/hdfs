@@ -118,6 +118,11 @@ function hdfscmd_case
     dfsrouteradmin)
       HADOOP_CLASSNAME='org.apache.hadoop.hdfs.tools.federation.RouterAdmin'
     ;;
+    fedbalance)
+      HADOOP_CLASSNAME='org.apache.hadoop.hdfs.tools.fedbalance.FedBalance'
+      #hadoop_add_to_classpath_tools hadoop-distcp
+      #hadoop_add_to_classpath_tools hadoop-federation-balance
+    ;;
     diskbalancer)
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.tools.DiskBalancerCLI
     ;;
