@@ -177,7 +177,8 @@ public class RouterFedBalance extends Configured implements Tool {
       // Construct the balance job.
       BalanceJob.Builder<BalanceProcedure> builder = new BalanceJob.Builder<>();
       RouterDistCpProcedure dcp =
-          new RouterDistCpProcedure(DISTCP_PROCEDURE, null, delayDuration, context);
+          new RouterDistCpProcedure(DISTCP_PROCEDURE, null, delayDuration,
+              context);
       builder.nextProcedure(dcp);
       MountTableProcedure mtp =
           new MountTableProcedure(MOUNT_TABLE_PROCEDURE, null, delayDuration,

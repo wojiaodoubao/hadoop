@@ -52,6 +52,8 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_ENABLED_KEY;
 import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.CURRENT_SNAPSHOT_NAME;
 import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.LAST_SNAPSHOT_NAME;
 
@@ -182,6 +184,10 @@ public class DistCpProcedure extends BalanceProcedure {
     if (srcFs.exists(new Path(src, HdfsConstants.DOT_SNAPSHOT_DIR))) {
       throw new IOException(src + " shouldn't enable snapshot.");
     }
+    if (!conf.getBoolean(DFS_PERMISSIONS_ENABLED_KEY,
+        DFS_PERMISSIONS_ENABLED_DEFAULT)) {
+      throw new IOException("Permission is no enabled !");
+    }
     updateStage(Stage.INIT_DISTCP);
   }
 
@@ -239,8 +245,10 @@ public class DistCpProcedure extends BalanceProcedure {
 
   /**
    * Disable write by cancelling the execute permission of the source path.
+   * @param fbcontext the context.
+   * @throws IOException if can't disable write.
    */
-  protected void disableWrite(FedBalanceContext context) throws IOException {
+  protected void disableWrite(FedBalanceContext fbcontext) throws IOException {
     // Save and cancel permission.
     FileStatus status = srcFs.getFileStatus(src);
     fPerm = status.getPermission();
@@ -251,6 +259,7 @@ public class DistCpProcedure extends BalanceProcedure {
 
   /**
    * Enable write.
+   * @throws IOException if can't enable write.
    */
   protected void enableWrite() throws IOException {
     restorePermission();

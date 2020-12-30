@@ -26,6 +26,7 @@ import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.test.LambdaTestUtils;
 import org.apache.hadoop.tools.fedbalance.DistCpProcedure.Stage;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.tools.fedbalance.procedure.BalanceJob;
@@ -46,6 +47,7 @@ import java.net.URI;
 import java.util.Random;
 
 import static junit.framework.TestCase.assertTrue;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_ENABLED_KEY;
 import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.SCHEDULER_JOURNAL_URI;
 import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
 import static org.apache.hadoop.test.LambdaTestUtils.intercept;
@@ -95,6 +97,28 @@ public class TestDistCpProcedure {
     DistCpProcedure.enabledForTest = false;
     if (cluster != null) {
       cluster.shutdown();
+    }
+  }
+
+  @Test
+  public void testDisablePermissionCheck() throws Exception {
+    conf.setBoolean(DFS_PERMISSIONS_ENABLED_KEY, false);
+    try {
+      String testRoot = nnUri + "/user/foo/testdir." + getMethodName();
+      DistributedFileSystem fs =
+          (DistributedFileSystem) FileSystem.get(URI.create(nnUri), conf);
+      createFiles(fs, testRoot, srcfiles);
+      Path src = new Path(testRoot, SRCDAT);
+      Path dst = new Path(testRoot, DSTDAT);
+      FedBalanceContext context = buildContext(src, dst, MOUNT);
+      DistCpProcedure dcProcedure =
+          new DistCpProcedure("distcp-procedure", null, 1000, context);
+      LambdaTestUtils.intercept(IOException.class, "Permission is no enabled !",
+          "Expect permission check failure and throw IOException.",
+          () -> dcProcedure.preCheck());
+      cleanup(fs, new Path(testRoot));
+    } finally {
+      conf.unset(DFS_PERMISSIONS_ENABLED_KEY);
     }
   }
 
