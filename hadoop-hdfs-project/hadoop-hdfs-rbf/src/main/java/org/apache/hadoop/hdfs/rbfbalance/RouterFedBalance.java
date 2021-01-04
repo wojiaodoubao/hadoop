@@ -78,7 +78,8 @@ public class RouterFedBalance extends Configured implements Tool {
   /**
    * This class helps building the balance job.
    */
-  private class Builder {
+  public static class Builder {
+    private final Configuration conf;
     /* Force close all open files while there is no diff. */
     private boolean forceCloseOpen = false;
     /* Max number of concurrent maps to use for copy. */
@@ -96,9 +97,10 @@ public class RouterFedBalance extends Configured implements Tool {
     /* The dst input. This specifies the dst path. */
     private final String inputDst;
 
-    Builder(String inputSrc, String inputDst) {
+    public Builder(String inputSrc, String inputDst, Configuration conf) {
       this.inputSrc = inputSrc;
       this.inputDst = inputDst;
+      this.conf = conf;
     }
 
     /**
@@ -165,9 +167,9 @@ public class RouterFedBalance extends Configured implements Tool {
       if (dst.toUri().getAuthority() == null) {
         throw new IOException("The destination cluster must be specified.");
       }
-      Path src = getSrcPath(inputSrc);
+      Path src = getSrcPath(inputSrc, conf);
       String mount = inputSrc;
-      context = new FedBalanceContext.Builder(src, dst, mount, getConf())
+      context = new FedBalanceContext.Builder(src, dst, mount, conf)
           .setForceCloseOpenFiles(forceCloseOpen).setUseMountReadOnly(true)
           .setMapNum(map).setBandwidthLimit(bandwidth).setTrash(trashOpt)
           .setDelayDuration(delayDuration).setDiffThreshold(diffThreshold)
@@ -183,7 +185,7 @@ public class RouterFedBalance extends Configured implements Tool {
       MountTableProcedure mtp =
           new MountTableProcedure(MOUNT_TABLE_PROCEDURE, null, delayDuration,
               inputSrc, dst.toUri().getPath(), dst.toUri().getAuthority(),
-              getConf());
+              conf);
       builder.nextProcedure(mtp);
       TrashProcedure tp =
           new TrashProcedure(TRASH_PROCEDURE, null, delayDuration, context);
@@ -262,7 +264,7 @@ public class RouterFedBalance extends Configured implements Tool {
    */
   private int submit(CommandLine command, String inputSrc, String inputDst)
       throws IOException {
-    Builder builder = new Builder(inputSrc, inputDst);
+    Builder builder = new Builder(inputSrc, inputDst, getConf());
     // parse options.
     builder.setForceCloseOpen(command.hasOption(FORCE_CLOSE_OPEN.getOpt()));
     if (command.hasOption(MAP.getOpt())) {
@@ -315,12 +317,13 @@ public class RouterFedBalance extends Configured implements Tool {
   /**
    * Get src uri from Router.
    */
-  private Path getSrcPath(String fedPath) throws IOException {
-    String address = getConf().getTrimmed(
+  private static Path getSrcPath(String fedPath, Configuration conf)
+      throws IOException {
+    String address = conf.getTrimmed(
         RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_KEY,
         RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_DEFAULT);
     InetSocketAddress routerSocket = NetUtils.createSocketAddr(address);
-    RouterClient rClient = new RouterClient(routerSocket, getConf());
+    RouterClient rClient = new RouterClient(routerSocket, conf);
     try {
       MountTableManager mountTable = rClient.getMountTableManager();
       MountTable entry = MountTableProcedure.getMountEntry(fedPath, mountTable);

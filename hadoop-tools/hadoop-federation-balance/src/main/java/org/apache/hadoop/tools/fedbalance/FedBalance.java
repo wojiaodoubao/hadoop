@@ -71,7 +71,7 @@ public class FedBalance extends Configured implements Tool {
    * This class helps building the balance job.
    */
   public static class Builder {
-    private Configuration conf;
+    private final Configuration conf;
     /* Force close all open files while there is no diff. */
     private boolean forceCloseOpen = false;
     /* Max number of concurrent maps to use for copy. */
@@ -163,7 +163,7 @@ public class FedBalance extends Configured implements Tool {
       if (src.toUri().getAuthority() == null) {
         throw new IOException("The source cluster must be specified.");
       }
-      context = new FedBalanceContext.Builder(src, dst, NO_MOUNT, getConf())
+      context = new FedBalanceContext.Builder(src, dst, NO_MOUNT, conf)
           .setForceCloseOpenFiles(forceCloseOpen).setUseMountReadOnly(false)
           .setMapNum(map).setBandwidthLimit(bandwidth).setTrash(trashOpt)
           .setDiffThreshold(diffThreshold).build();

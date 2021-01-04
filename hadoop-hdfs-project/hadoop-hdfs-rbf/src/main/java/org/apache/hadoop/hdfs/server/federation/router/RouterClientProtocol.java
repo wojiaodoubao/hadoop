@@ -87,6 +87,7 @@ import org.apache.hadoop.hdfs.protocol.SnapshottableDirectoryStatus;
 import org.apache.hadoop.hdfs.protocol.SnapshotStatus;
 import org.apache.hadoop.hdfs.protocol.UnresolvedPathException;
 import org.apache.hadoop.hdfs.protocol.ZoneReencryptionStatus;
+import org.apache.hadoop.hdfs.rbfbalance.RouterFedBalance;
 import org.apache.hadoop.hdfs.security.token.block.DataEncryptionKey;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
 import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
@@ -104,7 +105,6 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.net.ConnectTimeoutException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
-import org.apache.hadoop.tools.fedbalance.FedBalance;
 import org.apache.hadoop.tools.fedbalance.FedBalanceConfigs;
 import org.apache.hadoop.tools.fedbalance.procedure.BalanceJob;
 import org.apache.hadoop.tools.fedbalance.procedure.BalanceProcedureScheduler;
@@ -1877,8 +1877,9 @@ public class RouterClientProtocol implements ClientProtocol {
       throw new IOException(
           "Rename of " + src + " to " + dst + " are at the same namespace.");
     }
-    // Build and submit federation balance job.
-    FedBalance.Builder builder = new FedBalance.Builder(src, dst, conf);
+    // Build and submit rbf balance job.
+    RouterFedBalance.Builder builder =
+        new RouterFedBalance.Builder(src, dst, conf);
     boolean forceCloseOpenFiles =
         conf.getBoolean(DFS_ROUTER_FEDERATION_RENAME_FORCE_CLOSE_OPEN_FILE,
             DFS_ROUTER_FEDERATION_RENAME_FORCE_CLOSE_OPEN_FILE_DEFAULT);
@@ -1894,7 +1895,6 @@ public class RouterClientProtocol implements ClientProtocol {
       throw new IOException("Unexpected negative value. map=" + map
           + " bandwidth=" + bandwidth + " delay=" + delay + " diff=" + diff);
     }
-    builder.setRouterCluster(true);
     builder.setForceCloseOpen(forceCloseOpenFiles);
     builder.setMap(map);
     builder.setBandWidth(bandwidth);
@@ -1911,7 +1911,7 @@ public class RouterClientProtocol implements ClientProtocol {
     BalanceJob job = builder.build();
     BalanceProcedureScheduler scheduler = rpcServer.getScheduler();
     scheduler.submit(job);
-    LOG.info("lijinglun:Rename {} to {} from namespace {} to {}. JobId={}.", src, dst,
+    LOG.info("Rename {} to {} from namespace {} to {}. JobId={}.", src, dst,
         srcLoc.getNameserviceId(), dstLoc.getNameserviceId(), job.getId());
     scheduler.waitUntilDone(job);
   }
