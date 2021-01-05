@@ -92,14 +92,18 @@ public class RouterFedBalance extends Configured implements Tool {
     private long delayDuration = TimeUnit.SECONDS.toMillis(1);
     /* Specify the threshold of diff entries. */
     private int diffThreshold = 0;
-    /* The source input. This specifies the source path. */
+    /* The source input. This specifies the original src path in federation. */
     private final String inputSrc;
-    /* The dst input. This specifies the dst path. */
-    private final String inputDst;
+    /* The resolved src input. This specifies the remote location of the src. */
+    private String resolvedSrc;
+    /* The resolved dst input. This specifies the remote location of the dst. */
+    private final String resolvedDst;
 
-    public Builder(String inputSrc, String inputDst, Configuration conf) {
+    public Builder(String inputSrc, String resolvedSrc, String resolvedDst,
+        Configuration conf) {
       this.inputSrc = inputSrc;
-      this.inputDst = inputDst;
+      this.resolvedSrc = resolvedSrc;
+      this.resolvedDst = resolvedDst;
       this.conf = conf;
     }
 
@@ -163,13 +167,17 @@ public class RouterFedBalance extends Configured implements Tool {
     public BalanceJob build() throws IOException {
       // Construct job context.
       FedBalanceContext context;
-      Path dst = new Path(inputDst);
+      Path dst = new Path(resolvedDst);
       if (dst.toUri().getAuthority() == null) {
         throw new IOException("The destination cluster must be specified.");
       }
-      Path src = getSrcPath(inputSrc, conf);
-      String mount = inputSrc;
-      context = new FedBalanceContext.Builder(src, dst, mount, conf)
+      Path src;
+      if (resolvedSrc == null) {
+        src = getSrcPath(inputSrc, conf);
+      } else {
+        src = new Path(resolvedSrc);
+      }
+      context = new FedBalanceContext.Builder(src, dst, inputSrc, conf)
           .setForceCloseOpenFiles(forceCloseOpen).setUseMountReadOnly(true)
           .setMapNum(map).setBandwidthLimit(bandwidth).setTrash(trashOpt)
           .setDelayDuration(delayDuration).setDiffThreshold(diffThreshold)
@@ -264,7 +272,7 @@ public class RouterFedBalance extends Configured implements Tool {
    */
   private int submit(CommandLine command, String inputSrc, String inputDst)
       throws IOException {
-    Builder builder = new Builder(inputSrc, inputDst, getConf());
+    Builder builder = new Builder(inputSrc, null, inputDst, getConf());
     // parse options.
     builder.setForceCloseOpen(command.hasOption(FORCE_CLOSE_OPEN.getOpt()));
     if (command.hasOption(MAP.getOpt())) {

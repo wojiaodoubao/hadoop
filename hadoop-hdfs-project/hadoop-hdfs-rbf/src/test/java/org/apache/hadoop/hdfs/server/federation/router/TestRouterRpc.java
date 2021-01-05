@@ -25,7 +25,10 @@ import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.delet
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.getFileStatus;
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.verifyFileExists;
 import static org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster.TEST_STRING;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_BANDWIDTH;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_MAP;
 import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
+import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.SCHEDULER_JOURNAL_URI;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -126,6 +129,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.Service.STATE;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.test.LambdaTestUtils;
+import org.apache.hadoop.tools.fedbalance.DistCpProcedure;
 import org.codehaus.jettison.json.JSONObject;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -217,9 +221,15 @@ public class TestRouterRpc {
     cluster.startCluster();
 
     // Start routers with only an RPC service
+    String journal = "hdfs://" + cluster.getCluster().getNameNode(1)
+        .getClientNamenodeAddress() + "/journal";
     Configuration routerConf = new RouterConfigBuilder()
         .metrics()
         .rpc()
+        .renameAcrossNamespace()
+        .set(SCHEDULER_JOURNAL_URI, journal)
+        .set(DFS_ROUTER_FEDERATION_RENAME_MAP, "1")
+        .set(DFS_ROUTER_FEDERATION_RENAME_BANDWIDTH, "1")
         .build();
     // We decrease the DN cache times to make the test faster
     routerConf.setTimeDuration(
@@ -240,11 +250,13 @@ public class TestRouterRpc {
         .getDatanodeManager().setHeartbeatExpireInterval(3000);
     cluster.getCluster().getNamesystem(1).getBlockManager()
         .getDatanodeManager().setHeartbeatExpireInterval(3000);
+    DistCpProcedure.enableForTest();
   }
 
   @AfterClass
   public static void tearDown() {
     cluster.shutdown();
+    DistCpProcedure.disableForTest();
   }
 
   @Before
@@ -600,6 +612,37 @@ public class TestRouterRpc {
     }
   }
 
+  protected void testRenameDir(RouterContext testRouter, String filename,
+      String renamedFile, boolean exceptionExpected) throws IOException {
+
+    createFile(testRouter.getFileSystem(), filename, 32);
+    // verify
+    verifyFileExists(testRouter.getFileSystem(), filename);
+    // rename
+    boolean exceptionThrown = false;
+    try {
+      DFSClient client = testRouter.getClient();
+      ClientProtocol clientProtocol = client.getNamenode();
+      clientProtocol.rename(filename, renamedFile);
+    } catch (Exception ex) {
+      exceptionThrown = true;
+    }
+    if (exceptionExpected) {
+      // Error was expected
+      assertTrue(exceptionThrown);
+      FileContext fileContext = testRouter.getFileContext();
+      assertTrue(fileContext.delete(new Path(filename), true));
+    } else {
+      // No error was expected
+      assertFalse(exceptionThrown);
+      // verify
+      assertTrue(verifyFileExists(testRouter.getFileSystem(), renamedFile));
+      // delete
+      FileContext fileContext = testRouter.getFileContext();
+      assertTrue(fileContext.delete(new Path(renamedFile), true));
+    }
+  }
+
   @Test
   public void testProxyRenameFiles() throws IOException, InterruptedException {
 
@@ -619,6 +662,20 @@ public class TestRouterRpc {
     // Rename a file to a destination that is in a different namespace (fails)
     filename = cluster.getFederatedTestDirectoryForNS(ns0) + "/testrename";
     renamedFile = cluster.getFederatedTestDirectoryForNS(ns1) + "/testrename";
+    testRename(router, filename, renamedFile, true);
+    testRename2(router, filename, renamedFile, true);
+  }
+
+  @Test
+  public void testProxyRenameDirs() throws Exception {
+    Thread.sleep(5000);
+    List<String> nss = cluster.getNameservices();
+    String ns0 = nss.get(0);
+    String ns1 = nss.get(1);
+
+    // Rename a dir to a destination that is in a different namespace (fails)
+    String filename = cluster.getFederatedTestDirectoryForNS(ns0) + "/testrename";
+    String renamedFile = cluster.getFederatedTestDirectoryForNS(ns1) + "/testrename";
     testRename(router, filename, renamedFile, true);
     testRename2(router, filename, renamedFile, true);
   }

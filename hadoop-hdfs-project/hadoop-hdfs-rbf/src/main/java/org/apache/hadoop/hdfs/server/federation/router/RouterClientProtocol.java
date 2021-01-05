@@ -30,6 +30,8 @@ import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_DIFF_DEFAULT;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_TRASH;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_TRASH_DEFAULT;
+import static org.apache.hadoop.tools.fedbalance.FedBalance.DISTCP_PROCEDURE;
+import static org.apache.hadoop.tools.fedbalance.FedBalance.TRASH_PROCEDURE;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.crypto.CryptoProtocolVersion;
@@ -87,7 +89,6 @@ import org.apache.hadoop.hdfs.protocol.SnapshottableDirectoryStatus;
 import org.apache.hadoop.hdfs.protocol.SnapshotStatus;
 import org.apache.hadoop.hdfs.protocol.UnresolvedPathException;
 import org.apache.hadoop.hdfs.protocol.ZoneReencryptionStatus;
-import org.apache.hadoop.hdfs.rbfbalance.RouterFedBalance;
 import org.apache.hadoop.hdfs.security.token.block.DataEncryptionKey;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier;
 import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
@@ -105,8 +106,12 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.net.ConnectTimeoutException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.tools.fedbalance.DistCpProcedure;
 import org.apache.hadoop.tools.fedbalance.FedBalanceConfigs;
+import org.apache.hadoop.tools.fedbalance.FedBalanceContext;
+import org.apache.hadoop.tools.fedbalance.TrashProcedure;
 import org.apache.hadoop.tools.fedbalance.procedure.BalanceJob;
+import org.apache.hadoop.tools.fedbalance.procedure.BalanceProcedure;
 import org.apache.hadoop.tools.fedbalance.procedure.BalanceProcedureScheduler;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
@@ -207,7 +212,7 @@ public class RouterClientProtocol implements ClientProtocol {
     this.snapshotProto = new RouterSnapshot(rpcServer);
     this.routerCacheAdmin = new RouterCacheAdmin(rpcServer);
     this.securityManager = rpcServer.getRouterSecurityManager();
-    this.conf = rpcServer.getConfig();
+    this.conf = conf;
   }
 
   @Override
@@ -1859,6 +1864,14 @@ public class RouterClientProtocol implements ClientProtocol {
     return new RemoteParam(dstMap);
   }
 
+  /**
+   * Rename across namespaces.
+   *
+   * @param src the source path. There is no mount point under the src path.
+   * @param dst the dst path.
+   * @param srcLocations the remote locations of src.
+   * @param dstLocations the remote locations of dst.
+   */
   private void renameAcrossNamespace(final String src, final String dst,
       final List<RemoteLocation> srcLocations,
       final List<RemoteLocation> dstLocations) throws IOException {
@@ -1877,10 +1890,22 @@ public class RouterClientProtocol implements ClientProtocol {
       throw new IOException(
           "Rename of " + src + " to " + dst + " are at the same namespace.");
     }
-    // Build and submit rbf balance job.
-    RouterFedBalance.Builder builder =
-        new RouterFedBalance.Builder(src, dst, conf);
-    boolean forceCloseOpenFiles =
+    // Build and submit rbf rename job.
+    BalanceJob job = buildRouterRenameJob(new Path(srcLoc.getDest()),
+        new Path(dstLoc.getDest()), null);
+    BalanceProcedureScheduler scheduler = rpcServer.getScheduler();
+    scheduler.submit(job);
+    LOG.info("Rename {} to {} from namespace {} to {}. JobId={}.", src, dst,
+        srcLoc.getNameserviceId(), dstLoc.getNameserviceId(), job.getId());
+    scheduler.waitUntilDone(job);
+  }
+
+  /**
+   * Build router rename job moving data from src to dst.
+   */
+  private BalanceJob buildRouterRenameJob(Path src, Path dst, String mount)
+      throws IOException {
+    boolean forceCloseOpen =
         conf.getBoolean(DFS_ROUTER_FEDERATION_RENAME_FORCE_CLOSE_OPEN_FILE,
             DFS_ROUTER_FEDERATION_RENAME_FORCE_CLOSE_OPEN_FILE_DEFAULT);
     int map = conf.getInt(DFS_ROUTER_FEDERATION_RENAME_MAP, -1);
@@ -1891,29 +1916,30 @@ public class RouterClientProtocol implements ClientProtocol {
         DFS_ROUTER_FEDERATION_RENAME_DIFF_DEFAULT);
     String trashPolicy = conf.get(DFS_ROUTER_FEDERATION_RENAME_TRASH,
         DFS_ROUTER_FEDERATION_RENAME_TRASH_DEFAULT);
+    FedBalanceConfigs.TrashOption trashOpt =
+        FedBalanceConfigs.TrashOption.valueOf(trashPolicy);
     if (map < 0 || bandwidth < 0 || delay < 0 || diff < 0) {
       throw new IOException("Unexpected negative value. map=" + map
           + " bandwidth=" + bandwidth + " delay=" + delay + " diff=" + diff);
     }
-    builder.setForceCloseOpen(forceCloseOpenFiles);
-    builder.setMap(map);
-    builder.setBandWidth(bandwidth);
-    builder.setDelayDuration(delay);
-    builder.setDiffThreshold(diff);
-    if (trashPolicy.equalsIgnoreCase("skip")) {
-      builder.setTrashOpt(FedBalanceConfigs.TrashOption.SKIP);
-    } else if (trashPolicy.equalsIgnoreCase("trash")) {
-      builder.setTrashOpt(FedBalanceConfigs.TrashOption.TRASH);
-    } else if (trashPolicy.equalsIgnoreCase("delete")) {
-      builder.setTrashOpt(FedBalanceConfigs.TrashOption.DELETE);
-    }
+    // Construct job context.
+    FedBalanceContext context =
+        new FedBalanceContext.Builder(src, dst, mount, conf)
+        .setForceCloseOpenFiles(forceCloseOpen).setUseMountReadOnly(true)
+        .setMapNum(map).setBandwidthLimit(bandwidth).setTrash(trashOpt)
+        .setDelayDuration(delay).setDiffThreshold(diff)
+        .build();
 
-    BalanceJob job = builder.build();
-    BalanceProcedureScheduler scheduler = rpcServer.getScheduler();
-    scheduler.submit(job);
-    LOG.info("Rename {} to {} from namespace {} to {}. JobId={}.", src, dst,
-        srcLoc.getNameserviceId(), dstLoc.getNameserviceId(), job.getId());
-    scheduler.waitUntilDone(job);
+    LOG.info(context.toString());
+    // Construct the balance job.
+    BalanceJob.Builder<BalanceProcedure> builder = new BalanceJob.Builder<>();
+    DistCpProcedure dcp =
+        new DistCpProcedure(DISTCP_PROCEDURE, null, delay, context);
+    builder.nextProcedure(dcp);
+    TrashProcedure tp =
+        new TrashProcedure(TRASH_PROCEDURE, null, delay, context);
+    builder.nextProcedure(tp);
+    return builder.build();
   }
 
   /**

@@ -59,9 +59,9 @@ public class FedBalance extends Configured implements Tool {
       LoggerFactory.getLogger(FedBalance.class);
   private static final String SUBMIT_COMMAND = "submit";
   private static final String CONTINUE_COMMAND = "continue";
-  private static final String NO_MOUNT = "no-mount";
-  private static final String DISTCP_PROCEDURE = "distcp-procedure";
-  private static final String TRASH_PROCEDURE = "trash-procedure";
+  public static final String NO_MOUNT = "no-mount";
+  public static final String DISTCP_PROCEDURE = "distcp-procedure";
+  public static final String TRASH_PROCEDURE = "trash-procedure";
 
   public static final String FED_BALANCE_DEFAULT_XML =
       "hdfs-fedbalance-default.xml";

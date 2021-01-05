@@ -55,6 +55,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.fs.*;
 import org.apache.hadoop.hdfs.HAUtil;
 import org.apache.hadoop.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.thirdparty.com.google.common.cache.CacheLoader;
@@ -413,8 +414,6 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
         conf.getBoolean(DFS_ROUTER_FEDERATION_RENAME_ENABLE,
             DFS_ROUTER_FEDERATION_RENAME_ENABLE_DEFAULT);
     if (enableRenameAcrossNamespace) {
-      String nsId = DFSUtil.getNamenodeNameServiceId(conf);
-      String namenodeId = HAUtil.getNameNodeId(conf, nsId);
       Configuration sConf = new Configuration(conf);
       URI journalUri;
       try {
@@ -423,9 +422,16 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
         throw new IOException("Bad journal uri. Please check configuration for "
             + SCHEDULER_JOURNAL_URI);
       }
-      String routerJournal = journalUri.getScheme() + "//"
-          + journalUri.getAuthority() + "/" + journalUri.getPath() + "/" + nsId
-          + "/" + namenodeId;
+      Path child;
+      String nsId = DFSUtil.getNamenodeNameServiceId(conf);
+      String namenodeId = HAUtil.getNameNodeId(conf, nsId);
+      if (nsId == null || namenodeId == null) {
+        child = new Path(
+            listenAddress.getHostName() + "_" + listenAddress.getPort());
+      } else {
+        child = new Path(nsId, namenodeId);
+      }
+      String routerJournal = new Path(journalUri.toString(), child).toString();
       sConf.set(SCHEDULER_JOURNAL_URI, routerJournal);
       scheduler = new BalanceProcedureScheduler(sConf);
       scheduler.init(true);
