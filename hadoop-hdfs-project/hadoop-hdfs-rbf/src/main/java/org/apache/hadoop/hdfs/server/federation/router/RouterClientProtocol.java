@@ -32,6 +32,7 @@ import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_TRASH_DEFAULT;
 import static org.apache.hadoop.tools.fedbalance.FedBalance.DISTCP_PROCEDURE;
 import static org.apache.hadoop.tools.fedbalance.FedBalance.TRASH_PROCEDURE;
+import static org.apache.hadoop.tools.fedbalance.FedBalance.NO_MOUNT;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.crypto.CryptoProtocolVersion;
@@ -622,7 +623,7 @@ public class RouterClientProtocol implements ClientProtocol {
     final List<RemoteLocation> locs = new LinkedList<>(srcLocations);
     RemoteParam dstParam = getRenameDestinations(locs, dstLocations);
     if (locs.isEmpty()) {
-      renameAcrossNamespace(src, dst, srcLocations, dstLocations);
+      return renameAcrossNamespace(src, dst, srcLocations, dstLocations);
     }
     RemoteMethod method = new RemoteMethod("rename",
         new Class<?>[] {String.class, String.class},
@@ -649,6 +650,7 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteParam dstParam = getRenameDestinations(locs, dstLocations);
     if (locs.isEmpty()) {
       renameAcrossNamespace(src, dst, srcLocations, dstLocations);
+      return;
     }
     RemoteMethod method = new RemoteMethod("rename2",
         new Class<?>[] {String.class, String.class, options.getClass()},
@@ -1871,8 +1873,10 @@ public class RouterClientProtocol implements ClientProtocol {
    * @param dst the dst path.
    * @param srcLocations the remote locations of src.
    * @param dstLocations the remote locations of dst.
+   * @throws IOException if rename fails.
+   * @return true if rename succeeds.
    */
-  private void renameAcrossNamespace(final String src, final String dst,
+  private boolean renameAcrossNamespace(final String src, final String dst,
       final List<RemoteLocation> srcLocations,
       final List<RemoteLocation> dstLocations) throws IOException {
     if (!rpcServer.enableRenameAcrossNamespace()) {
@@ -1891,19 +1895,25 @@ public class RouterClientProtocol implements ClientProtocol {
           "Rename of " + src + " to " + dst + " are at the same namespace.");
     }
     // Build and submit rbf rename job.
-    BalanceJob job = buildRouterRenameJob(new Path(srcLoc.getDest()),
-        new Path(dstLoc.getDest()), null);
+    BalanceJob job = buildRouterRenameJob(
+        new Path("hdfs://" + srcLoc.getNameserviceId() + srcLoc.getDest()),
+        new Path("hdfs://" + dstLoc.getNameserviceId() + dstLoc.getDest()));
     BalanceProcedureScheduler scheduler = rpcServer.getScheduler();
     scheduler.submit(job);
     LOG.info("Rename {} to {} from namespace {} to {}. JobId={}.", src, dst,
         srcLoc.getNameserviceId(), dstLoc.getNameserviceId(), job.getId());
     scheduler.waitUntilDone(job);
+    if (job.getError() != null) {
+      throw new IOException("Rename of " + src + " to " + dst + " failed.",
+          job.getError());
+    }
+    return true;
   }
 
   /**
    * Build router rename job moving data from src to dst.
    */
-  private BalanceJob buildRouterRenameJob(Path src, Path dst, String mount)
+  private BalanceJob buildRouterRenameJob(Path src, Path dst)
       throws IOException {
     boolean forceCloseOpen =
         conf.getBoolean(DFS_ROUTER_FEDERATION_RENAME_FORCE_CLOSE_OPEN_FILE,
@@ -1917,14 +1927,14 @@ public class RouterClientProtocol implements ClientProtocol {
     String trashPolicy = conf.get(DFS_ROUTER_FEDERATION_RENAME_TRASH,
         DFS_ROUTER_FEDERATION_RENAME_TRASH_DEFAULT);
     FedBalanceConfigs.TrashOption trashOpt =
-        FedBalanceConfigs.TrashOption.valueOf(trashPolicy);
+        FedBalanceConfigs.TrashOption.valueOf(trashPolicy.toUpperCase());
     if (map < 0 || bandwidth < 0 || delay < 0 || diff < 0) {
       throw new IOException("Unexpected negative value. map=" + map
           + " bandwidth=" + bandwidth + " delay=" + delay + " diff=" + diff);
     }
     // Construct job context.
     FedBalanceContext context =
-        new FedBalanceContext.Builder(src, dst, mount, conf)
+        new FedBalanceContext.Builder(src, dst, NO_MOUNT, conf)
         .setForceCloseOpenFiles(forceCloseOpen).setUseMountReadOnly(true)
         .setMapNum(map).setBandwidthLimit(bandwidth).setTrash(trashOpt)
         .setDelayDuration(delay).setDiffThreshold(diff)

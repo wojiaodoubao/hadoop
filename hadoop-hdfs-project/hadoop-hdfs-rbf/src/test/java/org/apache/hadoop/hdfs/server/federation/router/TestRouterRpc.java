@@ -28,6 +28,7 @@ import static org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster.TEST
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_BANDWIDTH;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_MAP;
 import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
+import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
 import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.SCHEDULER_JOURNAL_URI;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -54,6 +55,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
@@ -125,6 +127,7 @@ import org.apache.hadoop.io.EnumSetWritable;
 import org.apache.hadoop.io.erasurecode.ECSchema;
 import org.apache.hadoop.io.erasurecode.ErasureCodeConstants;
 import org.apache.hadoop.ipc.CallerContext;
+import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.Service.STATE;
 import org.apache.hadoop.test.GenericTestUtils;
@@ -612,34 +615,41 @@ public class TestRouterRpc {
     }
   }
 
-  protected void testRenameDir(RouterContext testRouter, String filename,
-      String renamedFile, boolean exceptionExpected) throws IOException {
-
-    createFile(testRouter.getFileSystem(), filename, 32);
+  protected void createDir(FileSystem fs, String dir) throws IOException {
+    fs.mkdirs(new Path(dir));
+    String file = dir + "/file";
+    createFile(fs, file, 32);
     // verify
-    verifyFileExists(testRouter.getFileSystem(), filename);
+    verifyFileExists(fs, dir);
+    verifyFileExists(fs, file);
+  }
+
+  protected void testRenameDir(RouterContext testRouter, String path,
+      String renamedPath, boolean exceptionExpected, Callable<Object> call)
+      throws IOException {
+    createDir(testRouter.getFileSystem(), path);
     // rename
     boolean exceptionThrown = false;
     try {
-      DFSClient client = testRouter.getClient();
-      ClientProtocol clientProtocol = client.getNamenode();
-      clientProtocol.rename(filename, renamedFile);
+      call.call();
+      assertFalse(verifyFileExists(testRouter.getFileSystem(), path));
+      assertTrue(
+          verifyFileExists(testRouter.getFileSystem(), renamedPath + "/file"));
     } catch (Exception ex) {
       exceptionThrown = true;
+      assertTrue(verifyFileExists(testRouter.getFileSystem(), path + "/file"));
+      assertFalse(verifyFileExists(testRouter.getFileSystem(), renamedPath));
+    } finally {
+      FileContext fileContext = testRouter.getFileContext();
+      fileContext.delete(new Path(path), true);
+      fileContext.delete(new Path(renamedPath), true);
     }
     if (exceptionExpected) {
       // Error was expected
       assertTrue(exceptionThrown);
-      FileContext fileContext = testRouter.getFileContext();
-      assertTrue(fileContext.delete(new Path(filename), true));
     } else {
       // No error was expected
       assertFalse(exceptionThrown);
-      // verify
-      assertTrue(verifyFileExists(testRouter.getFileSystem(), renamedFile));
-      // delete
-      FileContext fileContext = testRouter.getFileContext();
-      assertTrue(fileContext.delete(new Path(renamedFile), true));
     }
   }
 
@@ -667,17 +677,149 @@ public class TestRouterRpc {
   }
 
   @Test
-  public void testProxyRenameDirs() throws Exception {
+  public void testSuccessfulRbfRename() throws Exception {
     Thread.sleep(5000);
     List<String> nss = cluster.getNameservices();
     String ns0 = nss.get(0);
     String ns1 = nss.get(1);
 
-    // Rename a dir to a destination that is in a different namespace (fails)
-    String filename = cluster.getFederatedTestDirectoryForNS(ns0) + "/testrename";
-    String renamedFile = cluster.getFederatedTestDirectoryForNS(ns1) + "/testrename";
-    testRename(router, filename, renamedFile, true);
-    testRename2(router, filename, renamedFile, true);
+    // Test successfully rename a dir to a destination that is in a different
+    // namespace.
+    String dir =
+        cluster.getFederatedTestDirectoryForNS(ns0) + "/" + getMethodName();
+    String renamedDir =
+        cluster.getFederatedTestDirectoryForNS(ns1) + "/" + getMethodName();
+    testRenameDir(router, dir, renamedDir, false, () -> {
+      DFSClient client = router.getClient();
+      ClientProtocol clientProtocol = client.getNamenode();
+      clientProtocol.rename(dir, renamedDir);
+      return null;
+    });
+    testRenameDir(router, dir, renamedDir, false, () -> {
+      DFSClient client = router.getClient();
+      ClientProtocol clientProtocol = client.getNamenode();
+      clientProtocol.rename2(dir, renamedDir);
+      return null;
+    });
+  }
+
+  @Test
+  public void testRbfRenameFile() throws Exception {
+    Thread.sleep(5000);
+    List<String> nss = cluster.getNameservices();
+    String ns0 = nss.get(0);
+    String ns1 = nss.get(1);
+
+    // Test router federation rename a file.
+    String file =
+        cluster.getFederatedTestDirectoryForNS(ns0) + "/" + getMethodName();
+    String renamedFile =
+        cluster.getFederatedTestDirectoryForNS(ns1) + "/" + getMethodName();
+    createFile(routerFS, file, 32);
+    getRouterFileSystem().mkdirs(new Path(renamedFile));
+    LambdaTestUtils.intercept(RemoteException.class, "should be a directory",
+        "Expect RemoteException.", () -> {
+          DFSClient client = router.getClient();
+          ClientProtocol clientProtocol = client.getNamenode();
+          clientProtocol.rename(file, renamedFile);
+          return null;
+        });
+    LambdaTestUtils.intercept(RemoteException.class, "should be a directory",
+        "Expect RemoteException.", () -> {
+          DFSClient client = router.getClient();
+          ClientProtocol clientProtocol = client.getNamenode();
+          clientProtocol.rename2(file, renamedFile);
+          return null;
+        });
+    getRouterFileSystem().delete(new Path(file), true);
+    getRouterFileSystem().delete(new Path(renamedFile), true);
+  }
+
+  @Test
+  public void testRbfRenameWhenDstAlreadyExists() throws Exception {
+    Thread.sleep(5000);
+    List<String> nss = cluster.getNameservices();
+    String ns0 = nss.get(0);
+    String ns1 = nss.get(1);
+
+    // Test router federation rename a path to a destination that is in a
+    // different namespace and already exists.
+    String dir =
+        cluster.getFederatedTestDirectoryForNS(ns0) + "/" + getMethodName();
+    String renamedDir =
+        cluster.getFederatedTestDirectoryForNS(ns1) + "/" + getMethodName();
+    createDir(routerFS, dir);
+    getRouterFileSystem().mkdirs(new Path(renamedDir));
+    LambdaTestUtils.intercept(RemoteException.class, "already exists",
+        "Expect RemoteException.", () -> {
+          DFSClient client = router.getClient();
+          ClientProtocol clientProtocol = client.getNamenode();
+          clientProtocol.rename(dir, renamedDir);
+          return null;
+        });
+    LambdaTestUtils.intercept(RemoteException.class, "already exists",
+        "Expect RemoteException.", () -> {
+          DFSClient client = router.getClient();
+          ClientProtocol clientProtocol = client.getNamenode();
+          clientProtocol.rename2(dir, renamedDir);
+          return null;
+        });
+    getRouterFileSystem().delete(new Path(dir), true);
+    getRouterFileSystem().delete(new Path(renamedDir), true);
+  }
+
+  @Test
+  public void testRbfRenameWhenSrcNotExists() throws Exception {
+    Thread.sleep(5000);
+    List<String> nss = cluster.getNameservices();
+    String ns0 = nss.get(0);
+    String ns1 = nss.get(1);
+
+    // Test router federation rename un-existed path.
+    String dir =
+        cluster.getFederatedTestDirectoryForNS(ns0) + "/" + getMethodName();
+    String renamedDir =
+        cluster.getFederatedTestDirectoryForNS(ns1) + "/" + getMethodName();
+    LambdaTestUtils.intercept(RemoteException.class, "File does not exist",
+        "Expect RemoteException.", () -> {
+          DFSClient client = router.getClient();
+          ClientProtocol clientProtocol = client.getNamenode();
+          clientProtocol.rename(dir, renamedDir);
+          return null;
+        });
+    LambdaTestUtils.intercept(RemoteException.class, "File does not exist",
+        "Expect RemoteException.", () -> {
+          DFSClient client = router.getClient();
+          ClientProtocol clientProtocol = client.getNamenode();
+          clientProtocol.rename2(dir, renamedDir);
+          return null;
+        });
+  }
+
+  @Test
+  public void testRbfRenameOfMountPoint() throws Exception {
+    Thread.sleep(5000);
+    List<String> nss = cluster.getNameservices();
+    String ns0 = nss.get(0);
+    String ns1 = nss.get(1);
+
+    // Test router federation rename a mount point.
+    String dir = cluster.getFederatedPathForNS(ns0);
+    String renamedDir = cluster.getFederatedPathForNS(ns1);
+    LambdaTestUtils.intercept(RemoteException.class, "is a mount point",
+        "Expect RemoteException.", () -> {
+          DFSClient client = router.getClient();
+          ClientProtocol clientProtocol = client.getNamenode();
+          clientProtocol.rename(dir, renamedDir);
+          return null;
+        });
+    LambdaTestUtils.intercept(RemoteException.class, "is a mount point",
+        "Expect RemoteException.", () -> {
+          DFSClient client = router.getClient();
+          ClientProtocol clientProtocol = client.getNamenode();
+          clientProtocol.rename2(dir, renamedDir);
+          return null;
+        });
   }
 
   @Test
