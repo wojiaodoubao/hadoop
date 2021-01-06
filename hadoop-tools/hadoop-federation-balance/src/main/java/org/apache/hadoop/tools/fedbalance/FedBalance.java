@@ -70,8 +70,7 @@ public class FedBalance extends Configured implements Tool {
   /**
    * This class helps building the balance job.
    */
-  public static class Builder {
-    private final Configuration conf;
+  private class Builder {
     /* Force close all open files while there is no diff. */
     private boolean forceCloseOpen = false;
     /* Max number of concurrent maps to use for copy. */
@@ -89,10 +88,9 @@ public class FedBalance extends Configured implements Tool {
     /* The dst input. This specifies the dst path. */
     private final String inputDst;
 
-    public Builder(String inputSrc, String inputDst, Configuration conf) {
+    public Builder(String inputSrc, String inputDst) {
       this.inputSrc = inputSrc;
       this.inputDst = inputDst;
-      this.conf = conf;
     }
 
     /**
@@ -163,7 +161,7 @@ public class FedBalance extends Configured implements Tool {
       if (src.toUri().getAuthority() == null) {
         throw new IOException("The source cluster must be specified.");
       }
-      context = new FedBalanceContext.Builder(src, dst, NO_MOUNT, conf)
+      context = new FedBalanceContext.Builder(src, dst, NO_MOUNT, getConf())
           .setForceCloseOpenFiles(forceCloseOpen).setUseMountReadOnly(false)
           .setMapNum(map).setBandwidthLimit(bandwidth).setTrash(trashOpt)
           .setDiffThreshold(diffThreshold).build();
@@ -252,7 +250,7 @@ public class FedBalance extends Configured implements Tool {
    */
   private int submit(CommandLine command, String inputSrc, String inputDst)
       throws IOException {
-    Builder builder = new Builder(inputSrc, inputDst, getConf());
+    Builder builder = new Builder(inputSrc, inputDst);
     // parse options.
     builder.setForceCloseOpen(command.hasOption(FORCE_CLOSE_OPEN.getOpt()));
     if (command.hasOption(MAP.getOpt())) {

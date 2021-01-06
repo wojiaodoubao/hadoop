@@ -353,7 +353,7 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
   public static final String DFS_ROUTER_FEDERATION_RENAME_PREFIX =
       FEDERATION_ROUTER_PREFIX + "federation.rename.";
   public static final String DFS_ROUTER_FEDERATION_RENAME_ENABLE =
-      FEDERATION_ROUTER_PREFIX + "enable";
+      DFS_ROUTER_FEDERATION_RENAME_PREFIX + "enable";
   public static final boolean DFS_ROUTER_FEDERATION_RENAME_ENABLE_DEFAULT =
       false;
   public static final String

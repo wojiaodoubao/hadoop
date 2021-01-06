@@ -78,8 +78,7 @@ public class RouterFedBalance extends Configured implements Tool {
   /**
    * This class helps building the balance job.
    */
-  public static class Builder {
-    private final Configuration conf;
+  private class Builder {
     /* Force close all open files while there is no diff. */
     private boolean forceCloseOpen = false;
     /* Max number of concurrent maps to use for copy. */
@@ -92,19 +91,14 @@ public class RouterFedBalance extends Configured implements Tool {
     private long delayDuration = TimeUnit.SECONDS.toMillis(1);
     /* Specify the threshold of diff entries. */
     private int diffThreshold = 0;
-    /* The source input. This specifies the original src path in federation. */
+    /* The source input. This specifies the source path. */
     private final String inputSrc;
-    /* The resolved src input. This specifies the remote location of the src. */
-    private String resolvedSrc;
-    /* The resolved dst input. This specifies the remote location of the dst. */
-    private final String resolvedDst;
+    /* The dst input. This specifies the dst path. */
+    private final String inputDst;
 
-    public Builder(String inputSrc, String resolvedSrc, String resolvedDst,
-        Configuration conf) {
+    Builder(String inputSrc, String inputDst) {
       this.inputSrc = inputSrc;
-      this.resolvedSrc = resolvedSrc;
-      this.resolvedDst = resolvedDst;
-      this.conf = conf;
+      this.inputDst = inputDst;
     }
 
     /**
@@ -167,17 +161,13 @@ public class RouterFedBalance extends Configured implements Tool {
     public BalanceJob build() throws IOException {
       // Construct job context.
       FedBalanceContext context;
-      Path dst = new Path(resolvedDst);
+      Path dst = new Path(inputDst);
       if (dst.toUri().getAuthority() == null) {
         throw new IOException("The destination cluster must be specified.");
       }
-      Path src;
-      if (resolvedSrc == null) {
-        src = getSrcPath(inputSrc, conf);
-      } else {
-        src = new Path(resolvedSrc);
-      }
-      context = new FedBalanceContext.Builder(src, dst, inputSrc, conf)
+      Path src = getSrcPath(inputSrc);
+      String mount = inputSrc;
+      context = new FedBalanceContext.Builder(src, dst, mount, getConf())
           .setForceCloseOpenFiles(forceCloseOpen).setUseMountReadOnly(true)
           .setMapNum(map).setBandwidthLimit(bandwidth).setTrash(trashOpt)
           .setDelayDuration(delayDuration).setDiffThreshold(diffThreshold)
@@ -193,7 +183,7 @@ public class RouterFedBalance extends Configured implements Tool {
       MountTableProcedure mtp =
           new MountTableProcedure(MOUNT_TABLE_PROCEDURE, null, delayDuration,
               inputSrc, dst.toUri().getPath(), dst.toUri().getAuthority(),
-              conf);
+              getConf());
       builder.nextProcedure(mtp);
       TrashProcedure tp =
           new TrashProcedure(TRASH_PROCEDURE, null, delayDuration, context);
@@ -272,7 +262,7 @@ public class RouterFedBalance extends Configured implements Tool {
    */
   private int submit(CommandLine command, String inputSrc, String inputDst)
       throws IOException {
-    Builder builder = new Builder(inputSrc, null, inputDst, getConf());
+    Builder builder = new Builder(inputSrc, inputDst);
     // parse options.
     builder.setForceCloseOpen(command.hasOption(FORCE_CLOSE_OPEN.getOpt()));
     if (command.hasOption(MAP.getOpt())) {
@@ -325,13 +315,12 @@ public class RouterFedBalance extends Configured implements Tool {
   /**
    * Get src uri from Router.
    */
-  private static Path getSrcPath(String fedPath, Configuration conf)
-      throws IOException {
-    String address = conf.getTrimmed(
+  private Path getSrcPath(String fedPath) throws IOException {
+    String address = getConf().getTrimmed(
         RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_KEY,
         RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_DEFAULT);
     InetSocketAddress routerSocket = NetUtils.createSocketAddr(address);
-    RouterClient rClient = new RouterClient(routerSocket, conf);
+    RouterClient rClient = new RouterClient(routerSocket, getConf());
     try {
       MountTableManager mountTable = rClient.getMountTableManager();
       MountTable entry = MountTableProcedure.getMountEntry(fedPath, mountTable);

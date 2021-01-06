@@ -1867,7 +1867,7 @@ public class RouterClientProtocol implements ClientProtocol {
   }
 
   /**
-   * Rename across namespaces.
+   * Router federation rename across namespaces.
    *
    * @param src the source path. There is no mount point under the src path.
    * @param dst the dst path.
@@ -1894,7 +1894,7 @@ public class RouterClientProtocol implements ClientProtocol {
       throw new IOException(
           "Rename of " + src + " to " + dst + " are at the same namespace.");
     }
-    // Build and submit rbf rename job.
+    // Build and submit router federation rename job.
     BalanceJob job = buildRouterRenameJob(
         new Path("hdfs://" + srcLoc.getNameserviceId() + srcLoc.getDest()),
         new Path("hdfs://" + dstLoc.getNameserviceId() + dstLoc.getDest()));
@@ -1911,7 +1911,7 @@ public class RouterClientProtocol implements ClientProtocol {
   }
 
   /**
-   * Build router rename job moving data from src to dst.
+   * Build router federation rename job moving data from src to dst.
    */
   private BalanceJob buildRouterRenameJob(Path src, Path dst)
       throws IOException {
