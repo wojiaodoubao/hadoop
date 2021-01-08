@@ -247,9 +247,9 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
   private final LoadingCache<DatanodeReportType, DatanodeInfo[]> dnCache;
 
   /** Enable router to rename across namespaces using federation balance job. */
-  private final boolean enableRenameAcrossNamespace;
-  /** Schedule the federation balance jobs. */
-  private final BalanceProcedureScheduler scheduler;
+  private boolean enableRenameAcrossNamespace;
+  /** Schedule the router federation rename jobs. */
+  private BalanceProcedureScheduler fedRenameScheduler;
   /**
    * Construct a router RPC server.
    *
@@ -409,7 +409,13 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
                 .forEach((key) -> this.dnCache.refresh(key)),
             0,
             dnCacheExpire, TimeUnit.MILLISECONDS);
+    initRouterFedRename();
+  }
 
+  /**
+   * Init the router federation rename environment.
+   */
+  private void initRouterFedRename() throws IOException {
     enableRenameAcrossNamespace =
         conf.getBoolean(DFS_ROUTER_FEDERATION_RENAME_ENABLE,
             DFS_ROUTER_FEDERATION_RENAME_ENABLE_DEFAULT);
@@ -425,6 +431,7 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
       Path child;
       String nsId = DFSUtil.getNamenodeNameServiceId(conf);
       String namenodeId = HAUtil.getNameNodeId(conf, nsId);
+      InetSocketAddress listenAddress = this.rpcServer.getListenerAddress();
       if (nsId == null || namenodeId == null) {
         child = new Path(
             listenAddress.getHostName() + "_" + listenAddress.getPort());
@@ -433,10 +440,10 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
       }
       String routerJournal = new Path(journalUri.toString(), child).toString();
       sConf.set(SCHEDULER_JOURNAL_URI, routerJournal);
-      scheduler = new BalanceProcedureScheduler(sConf);
-      scheduler.init(true);
+      fedRenameScheduler = new BalanceProcedureScheduler(sConf);
+      fedRenameScheduler.init(true);
     } else {
-      scheduler = null;
+      fedRenameScheduler = null;
     }
   }
 
@@ -473,8 +480,8 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
     if (securityManager != null) {
       this.securityManager.stop();
     }
-    if (this.scheduler != null) {
-      scheduler.shutDown();
+    if (this.fedRenameScheduler != null) {
+      fedRenameScheduler.shutDown();
     }
     super.serviceStop();
   }
@@ -483,8 +490,8 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
     return enableRenameAcrossNamespace;
   }
 
-  BalanceProcedureScheduler getScheduler() {
-    return this.scheduler;
+  BalanceProcedureScheduler getFedRenameScheduler() {
+    return this.fedRenameScheduler;
   }
 
   /**

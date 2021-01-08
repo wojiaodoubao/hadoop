@@ -88,7 +88,7 @@ public class FedBalance extends Configured implements Tool {
     /* The dst input. This specifies the dst path. */
     private final String inputDst;
 
-    public Builder(String inputSrc, String inputDst) {
+    private Builder(String inputSrc, String inputDst) {
       this.inputSrc = inputSrc;
       this.inputDst = inputDst;
     }

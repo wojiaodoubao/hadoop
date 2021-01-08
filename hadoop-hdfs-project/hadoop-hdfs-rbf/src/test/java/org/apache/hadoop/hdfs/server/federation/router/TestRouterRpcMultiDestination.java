@@ -19,7 +19,6 @@ package org.apache.hadoop.hdfs.server.federation.router;
 
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.createFile;
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.verifyFileExists;
-import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -50,7 +49,6 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
@@ -74,7 +72,6 @@ import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.test.GenericTestUtils;
-import org.apache.hadoop.test.LambdaTestUtils;
 import org.junit.Test;
 
 /**
@@ -334,39 +331,6 @@ public class TestRouterRpcMultiDestination extends TestRouterRpc {
     } finally {
       clientProtocol.delete(testPath, true);
     }
-  }
-
-  @Test
-  public void testRbfRenameWithMultiDestination() throws Exception {
-    Thread.sleep(5000);
-    List<String> nss = getCluster().getNameservices();
-    String ns1 = nss.get(1);
-    FileSystem routerFS = getRouterFileSystem();
-
-    // Test router federation rename a path with multi-destination.
-    String dir = "/same/" + getMethodName();
-    String renamedDir = getCluster().getFederatedTestDirectoryForNS(ns1) + "/"
-        + getMethodName();
-    createDir(routerFS, dir);
-    getRouterFileSystem().mkdirs(new Path(renamedDir));
-    LambdaTestUtils.intercept(RemoteException.class,
-        "The remote location should be exactly one", "Expect RemoteException.",
-        () -> {
-          DFSClient client = getRouterContext().getClient();
-          ClientProtocol clientProtocol = client.getNamenode();
-          clientProtocol.rename(dir, renamedDir);
-          return null;
-        });
-    LambdaTestUtils.intercept(RemoteException.class,
-        "The remote location should be exactly one", "Expect RemoteException.",
-        () -> {
-          DFSClient client = getRouterContext().getClient();
-          ClientProtocol clientProtocol = client.getNamenode();
-          clientProtocol.rename2(dir, renamedDir);
-          return null;
-        });
-    getRouterFileSystem().delete(new Path(dir), true);
-    getRouterFileSystem().delete(new Path(renamedDir), true);
   }
 
   /**
