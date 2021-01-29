@@ -74,7 +74,7 @@ public class DeadNodeDetector implements Runnable {
   /**
    * Waiting time when DeadNodeDetector's state is idle.
    */
-  private static final long IDLE_SLEEP_MS = 10000;
+  private static final long IDLE_SLEEP_MS = 100;
 
   /**
    * Client context name.
@@ -408,6 +408,8 @@ public class DeadNodeDetector implements Runnable {
     }
   }
 
+  public Set<DatanodeInfo> usedToBeAddedToDeadNodesProbeQueue = new HashSet<>();
+
   /**
    * Check dead node periodically.
    */
@@ -420,6 +422,7 @@ public class DeadNodeDetector implements Runnable {
         break;
       } else {
         LOG.debug("Add dead node to check: {}.", datanodeInfo);
+        usedToBeAddedToDeadNodesProbeQueue.add(datanodeInfo);
       }
     }
     state = State.IDLE;
