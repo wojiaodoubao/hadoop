@@ -17,11 +17,19 @@
  */
 package org.apache.hadoop.hdfs.server.federation.router;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.AclStatus;
+import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
+import org.apache.hadoop.hdfs.server.namenode.INode;
+import org.apache.hadoop.hdfs.server.namenode.RouterINode;
+import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.tools.fedbalance.DistCpProcedure;
 import org.apache.hadoop.tools.fedbalance.FedBalanceConfigs;
@@ -34,6 +42,7 @@ import org.apache.hadoop.tools.fedbalance.procedure.BalanceProcedureScheduler;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.security.PrivilegedExceptionAction;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -99,12 +108,18 @@ public class RouterFederationRename {
     }
     RemoteLocation srcLoc = srcLocations.get(0);
     RemoteLocation dstLoc = dstLocations.get(0);
+    String remoteSrc = srcLoc.getDest();
+    String remoteDst = dstLoc.getDest();
+    checkRouterRenamePath(src, dst, remoteSrc, remoteDst);
+    checkRenameSrcPermission(srcLoc.getNameserviceId(), remoteSrc);
+    checkRenameDstPermission(dstLoc.getNameserviceId(), remoteDst);
 
     UserGroupInformation routerUser = UserGroupInformation.getLoginUser();
 
     try {
       // as router user with saveJournal and task submission privileges
       return routerUser.doAs((PrivilegedExceptionAction<Boolean>) () -> {
+        // Build and submit router federation rename job.
         // Build and submit router federation rename job.
         BalanceJob job = buildRouterRenameJob(srcLoc.getNameserviceId(),
             dstLoc.getNameserviceId(), srcLoc.getDest(), dstLoc.getDest());
@@ -129,6 +144,75 @@ public class RouterFederationRename {
       LOG.warn("Fed balance job is interrupted.", e);
       throw new InterruptedIOException(e.getMessage());
     }
+  }
+
+  static void checkRouterRenamePath(String src, String dst, String remoteSrc,
+      String remoteDst) throws IOException {
+    if (remoteSrc.contains("/.snapshot/")) {
+      throw new IOException(
+          "Router federation rename can't rename snapshot path. src=" + src
+              + " dest=" + remoteSrc);
+    }
+    if (remoteDst.contains("/.snapshot/")) {
+      throw new IOException(
+          "Router federation rename can't rename snapshot path. dst=" + dst
+              + " dest=" + remoteDst);
+    }
+  }
+
+  @VisibleForTesting
+  void checkRenameSrcPermission(String srcNs, String src) throws IOException {
+    // Check permission.
+    RouterPermissionChecker pc = RouterAdminServer.getPermissionChecker();
+    if (!pc.isSuperUser()) {
+      Path srcPath = new Path("hdfs://" + srcNs + src);
+      FileSystem fs = srcPath.getFileSystem(conf);
+      String[] components = src.split(Path.SEPARATOR);
+      RouterINode[] inodes = new RouterINode[components.length];
+      // construct inodes.
+      Path path = new Path("/");
+      for (int i = 0; i < components.length; i++) {
+        INode parent = i == 0 ? null : inodes[i - 1];
+        inodes[i] = constructINode(fs, path, parent);
+        if (i < components.length-1) {
+          path = new Path(path, components[i + 1]);
+        }
+      }
+      pc.checkPermission(inodes, src, false, null, FsAction.WRITE);
+    }
+  }
+
+  @VisibleForTesting
+  void checkRenameDstPermission(String dstNs, String dst) throws IOException {
+    // Check permission.
+    RouterPermissionChecker pc = RouterAdminServer.getPermissionChecker();
+    if (!pc.isSuperUser()) {
+      Path dstPath = new Path("hdfs://" + dstNs + dst);
+      FileSystem fs = dstPath.getFileSystem(conf);
+      if (fs.exists(dstPath)) {
+        throw new AccessControlException(
+            "The dst path of router federation rename already exists!");
+      }
+      String[] components = dst.split(Path.SEPARATOR);
+      RouterINode[] inodes = new RouterINode[components.length];
+      // construct inodes.
+      Path path = new Path("/");
+      for (int i = 0; i < components.length - 1; i++) {
+        INode parent = i == 0 ? null : inodes[i - 1];
+        inodes[i] = constructINode(fs, path, parent);
+        if (i < components.length-1) {
+          path = new Path(path, components[i + 1]);
+        }
+      }
+      pc.checkPermission(inodes, dst, false, FsAction.WRITE, null);
+    }
+  }
+
+  static RouterINode constructINode(FileSystem fs, Path path, INode parent)
+      throws IOException {
+    FileStatus status = fs.getFileStatus(path);
+    AclStatus acl = fs.getAclStatus(path);
+    return new RouterINode(parent, status, acl);
   }
 
   /**

@@ -17,28 +17,42 @@
  */
 package org.apache.hadoop.hdfs.server.federation.router;
 
+import static org.apache.hadoop.fs.permission.FsAction.ALL;
+import static org.apache.hadoop.fs.permission.FsAction.READ_EXECUTE;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.createFile;
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.verifyFileExists;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_BANDWIDTH;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FEDERATION_RENAME_MAP;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_ADMIN_ENABLE;
 import static org.apache.hadoop.test.GenericTestUtils.getMethodName;
 import static org.apache.hadoop.tools.fedbalance.FedBalanceConfigs.SCHEDULER_JOURNAL_URI;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.verify;
 
 import java.io.IOException;
-import java.util.Arrays;
+import java.security.PrivilegedAction;
 import java.util.List;
+import java.util.Arrays;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.FileContext;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.AclEntry;
+import org.apache.hadoop.fs.permission.FsAction;
+import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.fs.permission.AclEntryScope;
+import org.apache.hadoop.fs.permission.AclEntryType;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
@@ -49,7 +63,11 @@ import org.apache.hadoop.hdfs.server.federation.MockResolver;
 import org.apache.hadoop.hdfs.server.federation.RouterConfigBuilder;
 import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.security.GroupMappingServiceProvider;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.test.LambdaTestUtils;
+import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableSet;
+import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.tools.fedbalance.DistCpProcedure;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -80,11 +98,36 @@ public class TestRouterFederationRename {
   /** File in the Namenode. */
   private String nnFile;
 
+  public static class MockGroupsMapping implements
+      GroupMappingServiceProvider {
+
+    @Override
+    public List<String> getGroups(String user) throws IOException {
+      return Arrays.asList(user+"_group");
+    }
+
+    @Override
+    public void cacheGroupsRefresh() throws IOException {
+    }
+
+    @Override
+    public void cacheGroupsAdd(List<String> groups)
+        throws IOException {
+    }
+
+    @Override
+    public Set<String> getGroupsSet(String user) throws IOException {
+      return ImmutableSet.of(user+"_group");
+    }
+  }
+
   @BeforeClass
   public static void globalSetUp() throws Exception {
     Configuration namenodeConf = new Configuration();
     namenodeConf.setBoolean(DFSConfigKeys.HADOOP_CALLER_CONTEXT_ENABLED_KEY,
         true);
+    namenodeConf.set(CommonConfigurationKeys.HADOOP_SECURITY_GROUP_MAPPING,
+        MockGroupsMapping.class.getName());
     cluster = new MiniRouterDFSCluster(false, NUM_SUBCLUSTERS);
     cluster.setNumDatanodesPerNameservice(NUM_DNS);
     cluster.addNamenodeOverrides(namenodeConf);
@@ -110,6 +153,10 @@ public class TestRouterFederationRename {
     // We decrease the DN cache times to make the test faster.
     routerConf.setTimeDuration(
         RBFConfigKeys.DN_REPORT_CACHE_EXPIRE, 1, TimeUnit.SECONDS);
+    routerConf.setBoolean(DFS_ROUTER_ADMIN_ENABLE, true);
+    routerConf.setBoolean(DFS_PERMISSIONS_ENABLED_KEY, true);
+    routerConf.set(CommonConfigurationKeys.HADOOP_SECURITY_GROUP_MAPPING,
+        MockGroupsMapping.class.getName());
     cluster.addRouterOverrides(routerConf);
     cluster.startRouters();
 
@@ -451,5 +498,161 @@ public class TestRouterFederationRename {
     assertFalse(cluster.getCluster().getFileSystem(0).exists(new Path(path)));
     assertTrue(
         cluster.getCluster().getFileSystem(1).delete(new Path(path), true));
+  }
+
+  @Test
+  public void testPermissionCheck() throws Exception {
+    List<String> nss = cluster.getNameservices();
+    String srcNs = nss.get(0);
+    String dstNs = nss.get(1);
+    // Verify rename snapshot path.
+    LambdaTestUtils.intercept(IOException.class,
+        "Router federation rename can't rename snapshot path",
+        "Expect IOException.", () -> RouterFederationRename
+            .checkRouterRenamePath("/src", "/dst", "/foo/.snapshot/src",
+                "/foo/dst"));
+    LambdaTestUtils.intercept(IOException.class,
+        "Router federation rename can't rename snapshot path",
+        "Expect IOException.", () -> RouterFederationRename
+            .checkRouterRenamePath("/src", "/dst", "/foo/src",
+                "/foo/.snapshot/dst"));
+    // Verify permission.
+    String dir = cluster.getFederatedTestDirectoryForNS(srcNs) + "/d0/"
+        + getMethodName();
+    String renamedDir = cluster.getFederatedTestDirectoryForNS(dstNs) + "/d0/"
+        + getMethodName();
+    Path srcPath = new Path(dir);
+    Path dstPath = new Path(renamedDir);
+    // Case1: the source path doesn't exist.
+    testRenameByUserFoo(() -> {
+      LambdaTestUtils.intercept(RemoteException.class, "FileNotFoundException",
+          "Expect FileNotFoundException.", () -> {
+            DFSClient client = router.getClient();
+            ClientProtocol clientProtocol = client.getNamenode();
+            clientProtocol.rename(dir, renamedDir);
+          });
+      return null;
+    });
+    // Case2: the source path parent without any permission.
+    createDir(routerFS, dir);
+    routerFS.setPermission(srcPath.getParent(),
+        FsPermission.createImmutable((short) 0));
+    testRenameByUserFoo(() -> {
+      LambdaTestUtils.intercept(RemoteException.class, "AccessControlException",
+          "Expect AccessControlException.", () -> {
+            DFSClient client = router.getClient();
+            ClientProtocol clientProtocol = client.getNamenode();
+            clientProtocol.rename(dir, renamedDir);
+          });
+      return null;
+    });
+    // Case3: the source path with rwxr-xr-x permission.
+    routerFS.setPermission(srcPath.getParent(),
+        FsPermission.createImmutable((short) 493));
+    testRenameByUserFoo(() -> {
+      LambdaTestUtils.intercept(RemoteException.class, "AccessControlException",
+          "Expect AccessControlException.", () -> {
+            DFSClient client = router.getClient();
+            ClientProtocol clientProtocol = client.getNamenode();
+            clientProtocol.rename(dir, renamedDir);
+          });
+      return null;
+    });
+    // Case4: the source path with unrelated acl user:not-foo:rwx.
+    routerFS.setAcl(srcPath.getParent(), buildAcl("not-foo", ALL));
+    testRenameByUserFoo(() -> {
+      LambdaTestUtils.intercept(RemoteException.class, "AccessControlException",
+          "Expect AccessControlException.", () -> {
+            DFSClient client = router.getClient();
+            ClientProtocol clientProtocol = client.getNamenode();
+            clientProtocol.rename(dir, renamedDir);
+          });
+      return null;
+    });
+    // Case5: the source path with user:foo:rwx. And the dst path doesn't exist.
+    routerFS.setAcl(srcPath.getParent(), buildAcl("foo", ALL));
+    assertFalse(routerFS.exists(dstPath.getParent()));
+    testRenameByUserFoo(() -> {
+      LambdaTestUtils.intercept(RemoteException.class, "FileNotFoundException",
+          "Expect FileNotFoundException.", () -> {
+            DFSClient client = router.getClient();
+            ClientProtocol clientProtocol = client.getNamenode();
+            clientProtocol.rename(dir, renamedDir);
+          });
+      return null;
+    });
+    // Case6: the dst path with bad permission.
+    assertTrue(routerFS.mkdirs(dstPath.getParent()));
+    testRenameByUserFoo(() -> {
+      LambdaTestUtils.intercept(RemoteException.class, "AccessControlException",
+          "Expect AccessControlException.", () -> {
+            DFSClient client = router.getClient();
+            ClientProtocol clientProtocol = client.getNamenode();
+            clientProtocol.rename(dir, renamedDir);
+          });
+      return null;
+    });
+    // Case7: the dst path with correct permission.
+    routerFS.setOwner(dstPath.getParent(), "foo", "foogroup");
+    DFSClient client = router.getClient();
+    ClientProtocol clientProtocol = client.getNamenode();
+    clientProtocol.rename(dir, renamedDir);
+    assertFalse(verifyFileExists(routerFS, dir));
+    assertTrue(
+        verifyFileExists(routerFS, renamedDir + "/file"));
+    // Clean up.
+    assertTrue(routerFS.delete(srcPath.getParent(), true));
+    assertTrue(routerFS.delete(dstPath.getParent(), true));
+  }
+
+  /**
+   * Build acl list.
+   *
+   * user::rwx
+   * group::rwx
+   * user:input_user:input_permission
+   * other::r-x
+   * @param user the input user.
+   * @param permission the input fs action.
+   */
+  private List<AclEntry> buildAcl(String user, FsAction permission) {
+    List<AclEntry> aclEntryList = Lists.newArrayList();
+    aclEntryList.add(
+        new AclEntry.Builder()
+            .setName(user)
+            .setPermission(permission)
+            .setScope(AclEntryScope.ACCESS)
+            .setType(AclEntryType.USER)
+            .build());
+    aclEntryList.add(
+        new AclEntry.Builder()
+            .setPermission(FsAction.ALL)
+            .setScope(AclEntryScope.ACCESS)
+            .setType(AclEntryType.USER)
+            .build());
+    aclEntryList.add(
+        new AclEntry.Builder()
+            .setPermission(FsAction.ALL)
+            .setScope(AclEntryScope.ACCESS)
+            .setType(AclEntryType.GROUP)
+            .build());
+    aclEntryList.add(
+        new AclEntry.Builder()
+            .setPermission(READ_EXECUTE)
+            .setScope(AclEntryScope.ACCESS)
+            .setType(AclEntryType.OTHER)
+            .build());
+    return aclEntryList;
+  }
+
+  private void testRenameByUserFoo(Callable<Object> call) {
+    UserGroupInformation foo = UserGroupInformation.createRemoteUser("foo");
+    foo.doAs((PrivilegedAction<Object>) () -> {
+      try {
+        return call.call();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    });
   }
 }

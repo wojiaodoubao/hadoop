@@ -52,12 +52,12 @@ import org.apache.hadoop.security.UserGroupInformation;
 public class FSPermissionChecker implements AccessControlEnforcer {
   static final Logger LOG = LoggerFactory.getLogger(UserGroupInformation.class);
 
-  private static String getPath(byte[][] components, int start, int end) {
+  protected static String getPath(byte[][] components, int start, int end) {
     return DFSUtil.byteArray2PathString(components, start, end - start + 1);
   }
 
   /** @return a string for throwing {@link AccessControlException} */
-  private String toAccessControlString(INodeAttributes inodeAttrib, String path,
+  protected String toAccessControlString(INodeAttributes inodeAttrib, String path,
       FsAction access) {
     return toAccessControlString(inodeAttrib, path, access, false);
   }
@@ -140,7 +140,7 @@ public class FSPermissionChecker implements AccessControlEnforcer {
     return attributeProvider;
   }
 
-  private AccessControlEnforcer getAccessControlEnforcer() {
+  protected AccessControlEnforcer getAccessControlEnforcer() {
     return (attributeProvider != null)
         ? attributeProvider.getExternalAccessControlEnforcer(this) : this;
   }
@@ -245,7 +245,7 @@ public class FSPermissionChecker implements AccessControlEnforcer {
    * Guarded by {@link FSNamesystem#readLock()}
    * Caller of this method must hold that lock.
    */
-  void checkPermission(INodesInPath inodesInPath, boolean doCheckOwner,
+  protected void checkPermission(INodesInPath inodesInPath, boolean doCheckOwner,
       FsAction ancestorAccess, FsAction parentAccess, FsAction access,
       FsAction subAccess, boolean ignoreEmptyDir)
       throws AccessControlException {
@@ -667,7 +667,7 @@ public class FSPermissionChecker implements AccessControlEnforcer {
   }
 
   /** Guarded by {@link FSNamesystem#readLock()} */
-  private void checkStickyBit(INodeAttributes[] inodes, byte[][] components,
+  protected void checkStickyBit(INodeAttributes[] inodes, byte[][] components,
       int index) throws AccessControlException {
     INodeAttributes parent = inodes[index];
     if (!parent.getFsPermission().getStickyBit()) {
@@ -783,7 +783,7 @@ public class FSPermissionChecker implements AccessControlEnforcer {
   }
 
   // rudimentary permission-less directory check
-  private static void checkSimpleTraverse(INodesInPath iip)
+  protected static void checkSimpleTraverse(INodesInPath iip)
       throws UnresolvedPathException, ParentNotDirectoryException {
     byte[][] components = iip.getPathComponents();
     for (int i=0; i < iip.length() - 1; i++) {
@@ -795,7 +795,7 @@ public class FSPermissionChecker implements AccessControlEnforcer {
     }
   }
 
-  private static void checkIsDirectory(INode inode, byte[][] components, int i)
+  protected static void checkIsDirectory(INode inode, byte[][] components, int i)
       throws UnresolvedPathException, ParentNotDirectoryException {
     if (inode != null && !inode.isDirectory()) {
       checkNotSymlink(inode, components, i);
@@ -827,8 +827,8 @@ public class FSPermissionChecker implements AccessControlEnforcer {
   //ops that create inodes are expected to throw ParentNotDirectoryExceptions.
   //the signature of other methods requires the PNDE to be thrown as an ACE.
   @SuppressWarnings("serial")
-  static class TraverseAccessControlException extends AccessControlException {
-    TraverseAccessControlException(IOException ioe) {
+  public static class TraverseAccessControlException extends AccessControlException {
+    public TraverseAccessControlException(IOException ioe) {
       super(ioe);
     }
     public void throwCause() throws UnresolvedPathException,
