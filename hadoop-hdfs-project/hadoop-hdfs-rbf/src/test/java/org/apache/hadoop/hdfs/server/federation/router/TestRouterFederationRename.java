@@ -523,78 +523,61 @@ public class TestRouterFederationRename {
         + getMethodName();
     Path srcPath = new Path(dir);
     Path dstPath = new Path(renamedDir);
+    UserGroupInformation foo = UserGroupInformation.createRemoteUser("foo");
     // Case1: the source path doesn't exist.
-    testRenameByUserFoo(() -> {
-      LambdaTestUtils.intercept(RemoteException.class, "FileNotFoundException",
-          "Expect FileNotFoundException.", () -> {
-            DFSClient client = router.getClient();
-            ClientProtocol clientProtocol = client.getNamenode();
-            clientProtocol.rename(dir, renamedDir);
-          });
-      return null;
-    });
+    LambdaTestUtils.intercept(RemoteException.class, "FileNotFoundException",
+        "Expect FileNotFoundException.", () -> {
+          DFSClient client = router.getClient(foo);
+          ClientProtocol clientProtocol = client.getNamenode();
+          clientProtocol.rename(dir, renamedDir);
+        });
     // Case2: the source path parent without any permission.
     createDir(routerFS, dir);
     routerFS.setPermission(srcPath.getParent(),
         FsPermission.createImmutable((short) 0));
-    testRenameByUserFoo(() -> {
-      LambdaTestUtils.intercept(RemoteException.class, "AccessControlException",
-          "Expect AccessControlException.", () -> {
-            DFSClient client = router.getClient();
-            ClientProtocol clientProtocol = client.getNamenode();
-            clientProtocol.rename(dir, renamedDir);
-          });
-      return null;
-    });
+    LambdaTestUtils.intercept(RemoteException.class, "AccessControlException",
+        "Expect AccessControlException.", () -> {
+          DFSClient client = router.getClient(foo);
+          ClientProtocol clientProtocol = client.getNamenode();
+          clientProtocol.rename(dir, renamedDir);
+        });
     // Case3: the source path with rwxr-xr-x permission.
     routerFS.setPermission(srcPath.getParent(),
         FsPermission.createImmutable((short) 493));
-    testRenameByUserFoo(() -> {
-      LambdaTestUtils.intercept(RemoteException.class, "AccessControlException",
-          "Expect AccessControlException.", () -> {
-            DFSClient client = router.getClient();
-            ClientProtocol clientProtocol = client.getNamenode();
-            clientProtocol.rename(dir, renamedDir);
-          });
-      return null;
-    });
+    LambdaTestUtils.intercept(RemoteException.class, "AccessControlException",
+        "Expect AccessControlException.", () -> {
+          DFSClient client = router.getClient(foo);
+          ClientProtocol clientProtocol = client.getNamenode();
+          clientProtocol.rename(dir, renamedDir);
+        });
     // Case4: the source path with unrelated acl user:not-foo:rwx.
     routerFS.setAcl(srcPath.getParent(), buildAcl("not-foo", ALL));
-    testRenameByUserFoo(() -> {
-      LambdaTestUtils.intercept(RemoteException.class, "AccessControlException",
-          "Expect AccessControlException.", () -> {
-            DFSClient client = router.getClient();
-            ClientProtocol clientProtocol = client.getNamenode();
-            clientProtocol.rename(dir, renamedDir);
-          });
-      return null;
-    });
+    LambdaTestUtils.intercept(RemoteException.class, "AccessControlException",
+        "Expect AccessControlException.", () -> {
+          DFSClient client = router.getClient(foo);
+          ClientProtocol clientProtocol = client.getNamenode();
+          clientProtocol.rename(dir, renamedDir);
+        });
     // Case5: the source path with user:foo:rwx. And the dst path doesn't exist.
     routerFS.setAcl(srcPath.getParent(), buildAcl("foo", ALL));
     assertFalse(routerFS.exists(dstPath.getParent()));
-    testRenameByUserFoo(() -> {
-      LambdaTestUtils.intercept(RemoteException.class, "FileNotFoundException",
-          "Expect FileNotFoundException.", () -> {
-            DFSClient client = router.getClient();
-            ClientProtocol clientProtocol = client.getNamenode();
-            clientProtocol.rename(dir, renamedDir);
-          });
-      return null;
-    });
+    LambdaTestUtils.intercept(RemoteException.class, "FileNotFoundException",
+        "Expect FileNotFoundException.", () -> {
+          DFSClient client = router.getClient(foo);
+          ClientProtocol clientProtocol = client.getNamenode();
+          clientProtocol.rename(dir, renamedDir);
+        });
     // Case6: the dst path with bad permission.
     assertTrue(routerFS.mkdirs(dstPath.getParent()));
-    testRenameByUserFoo(() -> {
-      LambdaTestUtils.intercept(RemoteException.class, "AccessControlException",
-          "Expect AccessControlException.", () -> {
-            DFSClient client = router.getClient();
-            ClientProtocol clientProtocol = client.getNamenode();
-            clientProtocol.rename(dir, renamedDir);
-          });
-      return null;
-    });
+    LambdaTestUtils.intercept(RemoteException.class, "AccessControlException",
+        "Expect AccessControlException.", () -> {
+          DFSClient client = router.getClient(foo);
+          ClientProtocol clientProtocol = client.getNamenode();
+          clientProtocol.rename(dir, renamedDir);
+        });
     // Case7: the dst path with correct permission.
     routerFS.setOwner(dstPath.getParent(), "foo", "foogroup");
-    DFSClient client = router.getClient();
+    DFSClient client = router.getClient(foo);
     ClientProtocol clientProtocol = client.getNamenode();
     clientProtocol.rename(dir, renamedDir);
     assertFalse(verifyFileExists(routerFS, dir));
@@ -643,16 +626,5 @@ public class TestRouterFederationRename {
             .setType(AclEntryType.OTHER)
             .build());
     return aclEntryList;
-  }
-
-  private void testRenameByUserFoo(Callable<Object> call) {
-    UserGroupInformation foo = UserGroupInformation.createRemoteUser("foo");
-    foo.doAs((PrivilegedAction<Object>) () -> {
-      try {
-        return call.call();
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    });
   }
 }
