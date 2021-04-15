@@ -33,7 +33,6 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.verify;
 
 import java.io.IOException;
-import java.security.PrivilegedAction;
 import java.util.List;
 import java.util.Arrays;
 import java.util.Random;
