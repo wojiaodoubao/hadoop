@@ -104,12 +104,14 @@ public class RouterFederationRename {
     String remoteSrc = srcLoc.getDest();
     String remoteDst = dstLoc.getDest();
     checkRouterRenamePath(src, dst, remoteSrc, remoteDst);
-    // check src path permission.
     try {
-      Path srcPath = new Path("hdfs://" + srcLoc.getNameserviceId() + remoteSrc);
+      // check src path permission.
+      Path srcPath =
+          new Path("hdfs://" + srcLoc.getNameserviceId() + remoteSrc);
       srcPath.getFileSystem(conf).access(srcPath.getParent(), FsAction.WRITE);
       // check dst path permission.
-      Path dstPath = new Path("hdfs://" + dstLoc.getNameserviceId() + remoteDst);
+      Path dstPath =
+          new Path("hdfs://" + dstLoc.getNameserviceId() + remoteDst);
       dstPath.getFileSystem(conf).access(dstPath.getParent(), FsAction.WRITE);
     } catch (AccessControlException e) {
       throw new AccessControlException(
@@ -132,10 +134,10 @@ public class RouterFederationRename {
           LOG.info("Rename {} to {} from namespace {} to {}. JobId={}.", src,
               dst, srcLoc.getNameserviceId(), dstLoc.getNameserviceId(),
               job.getId());
-          scheduler.waitUntilDone(job);
+          job.waitJobDone();
           if (job.getError() != null) {
-            throw new IOException("Rename of " + src + " to " + dst +
-                " failed.", job.getError());
+            throw new IOException(
+                "Rename of " + src + " to " + dst + " failed.", job.getError());
           }
           return true;
         } finally {
