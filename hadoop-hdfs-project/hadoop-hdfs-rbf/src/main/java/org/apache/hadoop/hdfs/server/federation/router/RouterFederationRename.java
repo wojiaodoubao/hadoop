@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
+import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.tools.fedbalance.DistCpProcedure;
@@ -105,25 +106,54 @@ public class RouterFederationRename {
     String remoteDst = dstLoc.getDest();
     checkRouterRenamePath(src, dst, remoteSrc, remoteDst);
     try {
-      // check src path permission.
-      Path srcPath =
-          new Path("hdfs://" + srcLoc.getNameserviceId() + remoteSrc);
-      srcPath.getFileSystem(conf).access(srcPath.getParent(), FsAction.WRITE);
-      // check dst path permission.
-      Path dstPath =
-          new Path("hdfs://" + dstLoc.getNameserviceId() + remoteDst);
-      dstPath.getFileSystem(conf).access(dstPath.getParent(), FsAction.WRITE);
+      if (UserGroupInformation.isSecurityEnabled()) {
+        // In security mode, check permission as remote user proxy by router
+        // user.
+        String remoteUserName = NameNode.getRemoteUser().getShortUserName();
+        UserGroupInformation proxyUser = UserGroupInformation
+            .createProxyUser(remoteUserName,
+                UserGroupInformation.getLoginUser());
+        proxyUser.doAs((PrivilegedExceptionAction<Object>) () -> {
+          checkPermission(srcLoc, dstLoc);
+          return null;
+        });
+      } else {
+        // In simple mode, check permission as remote user directly.
+        checkPermission(srcLoc, dstLoc);
+      }
     } catch (AccessControlException e) {
       throw new AccessControlException(
           "Permission denied rename " + src + "(" + srcLoc + ") to " + dst + "("
               + dstLoc + ") Reason=" + e.getMessage());
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new InterruptedIOException(
+          "Router Federation Rename is interrupted while checking permission.");
     }
+    // Build and submit router federation rename job.
+    return routerFedRenameInternal(srcLoc, dstLoc, remoteSrc, remoteDst, src,
+        dst);
+  }
 
+  private void checkPermission(RemoteLocation srcLoc, RemoteLocation dstLoc)
+      throws IOException {
+    // check src path permission.
+    Path srcPath =
+        new Path("hdfs://" + srcLoc.getNameserviceId() + srcLoc.getDest());
+    srcPath.getFileSystem(conf).access(srcPath.getParent(), FsAction.WRITE);
+    // check dst path permission.
+    Path dstPath =
+        new Path("hdfs://" + dstLoc.getNameserviceId() + dstLoc.getDest());
+    dstPath.getFileSystem(conf).access(dstPath.getParent(), FsAction.WRITE);
+  }
+
+  private boolean routerFedRenameInternal(RemoteLocation srcLoc,
+      RemoteLocation dstLoc, String remoteSrc, String remoteDst, String src,
+      String dst) throws IOException {
     UserGroupInformation routerUser = UserGroupInformation.getLoginUser();
     try {
       // as router user with saveJournal and task submission privileges
       return routerUser.doAs((PrivilegedExceptionAction<Boolean>) () -> {
-        // Build and submit router federation rename job.
         // Build and submit router federation rename job.
         BalanceJob job = buildRouterRenameJob(srcLoc.getNameserviceId(),
             dstLoc.getNameserviceId(), srcLoc.getDest(), dstLoc.getDest());
