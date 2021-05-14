@@ -102,55 +102,11 @@ public class RouterFederationRename {
     }
     RemoteLocation srcLoc = srcLocations.get(0);
     RemoteLocation dstLoc = dstLocations.get(0);
-    String remoteSrc = srcLoc.getDest();
-    String remoteDst = dstLoc.getDest();
-    checkRouterRenamePath(src, dst, remoteSrc, remoteDst);
-    try {
-      if (UserGroupInformation.isSecurityEnabled()) {
-        // In security mode, check permission as remote user proxy by router
-        // user.
-        String remoteUserName = NameNode.getRemoteUser().getShortUserName();
-        UserGroupInformation proxyUser = UserGroupInformation
-            .createProxyUser(remoteUserName,
-                UserGroupInformation.getLoginUser());
-        proxyUser.doAs((PrivilegedExceptionAction<Object>) () -> {
-          checkPermission(srcLoc, dstLoc);
-          return null;
-        });
-      } else {
-        // In simple mode, check permission as remote user directly.
-        checkPermission(srcLoc, dstLoc);
-      }
-    } catch (AccessControlException e) {
-      throw new AccessControlException(
-          "Permission denied rename " + src + "(" + srcLoc + ") to " + dst + "("
-              + dstLoc + ") Reason=" + e.getMessage());
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new InterruptedIOException(
-          "Router Federation Rename is interrupted while checking permission.");
-    }
-    // Build and submit router federation rename job.
-    return routerFedRenameInternal(srcLoc, dstLoc, remoteSrc, remoteDst, src,
-        dst);
-  }
+    checkSnapshotPath(srcLoc, dstLoc);
+    checkPermission(srcLoc, dstLoc);
 
-  private void checkPermission(RemoteLocation srcLoc, RemoteLocation dstLoc)
-      throws IOException {
-    // check src path permission.
-    Path srcPath =
-        new Path("hdfs://" + srcLoc.getNameserviceId() + srcLoc.getDest());
-    srcPath.getFileSystem(conf).access(srcPath.getParent(), FsAction.WRITE);
-    // check dst path permission.
-    Path dstPath =
-        new Path("hdfs://" + dstLoc.getNameserviceId() + dstLoc.getDest());
-    dstPath.getFileSystem(conf).access(dstPath.getParent(), FsAction.WRITE);
-  }
-
-  private boolean routerFedRenameInternal(RemoteLocation srcLoc,
-      RemoteLocation dstLoc, String remoteSrc, String remoteDst, String src,
-      String dst) throws IOException {
     UserGroupInformation routerUser = UserGroupInformation.getLoginUser();
+
     try {
       // as router user with saveJournal and task submission privileges
       return routerUser.doAs((PrivilegedExceptionAction<Boolean>) () -> {
@@ -164,10 +120,10 @@ public class RouterFederationRename {
           LOG.info("Rename {} to {} from namespace {} to {}. JobId={}.", src,
               dst, srcLoc.getNameserviceId(), dstLoc.getNameserviceId(),
               job.getId());
-          job.waitJobDone();
+          scheduler.waitUntilDone(job);
           if (job.getError() != null) {
-            throw new IOException(
-                "Rename of " + src + " to " + dst + " failed.", job.getError());
+            throw new IOException("Rename of " + src + " to " + dst +
+                " failed.", job.getError());
           }
           return true;
         } finally {
@@ -180,17 +136,61 @@ public class RouterFederationRename {
     }
   }
 
-  static void checkRouterRenamePath(String src, String dst, String remoteSrc,
-      String remoteDst) throws IOException {
-    if (remoteSrc.contains("/.snapshot/")) {
-      throw new IOException(
-          "Router federation rename can't rename snapshot path. src=" + src
-              + " dest=" + remoteSrc);
+  /**
+   * Check router federation rename permission.
+   */
+  private void checkPermission(RemoteLocation src, RemoteLocation dst)
+      throws IOException {
+    try {
+      if (UserGroupInformation.isSecurityEnabled()) {
+        // In security mode, check permission as remote user proxy by router
+        // user.
+        String remoteUserName = NameNode.getRemoteUser().getShortUserName();
+        UserGroupInformation proxyUser = UserGroupInformation
+            .createProxyUser(remoteUserName,
+                UserGroupInformation.getLoginUser());
+        proxyUser.doAs((PrivilegedExceptionAction<Object>) () -> {
+          checkRenamePermission(src, dst);
+          return null;
+        });
+      } else {
+        // In simple mode, check permission as remote user directly.
+        checkRenamePermission(src, dst);
+      }
+    } catch (AccessControlException e) {
+      throw new AccessControlException(
+          "Permission denied rename " + src.getSrc() + "(" + src + ") to " + dst
+              .getSrc() + "(" + dst + ") Reason=" + e.getMessage());
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new InterruptedIOException(
+          "Router Federation Rename is interrupted while checking permission.");
     }
-    if (remoteDst.contains("/.snapshot/")) {
-      throw new IOException(
+  }
+
+  private void checkRenamePermission(RemoteLocation srcLoc,
+      RemoteLocation dstLoc) throws IOException {
+    // check src path permission.
+    Path srcPath =
+        new Path("hdfs://" + srcLoc.getNameserviceId() + srcLoc.getDest());
+    srcPath.getFileSystem(conf).access(srcPath.getParent(), FsAction.WRITE);
+    // check dst path permission.
+    Path dstPath =
+        new Path("hdfs://" + dstLoc.getNameserviceId() + dstLoc.getDest());
+    dstPath.getFileSystem(conf).access(dstPath.getParent(), FsAction.WRITE);
+  }
+
+  static void checkSnapshotPath(RemoteLocation src, RemoteLocation dst)
+      throws AccessControlException {
+    if (src.getDest().contains("/.snapshot/")) {
+      throw new AccessControlException(
+          "Router federation rename can't rename snapshot path. src=" + src
+              .getSrc() + "(" + src + ")");
+    }
+    if (dst.getDest().contains("/.snapshot/")) {
+      throw new AccessControlException(
           "Router federation rename can't rename snapshot path. dst=" + dst
-              + " dest=" + remoteDst);
+              .getSrc() + "(" + dst + ")");
     }
   }
 
