@@ -38,6 +38,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster;
 import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster.RouterContext;
 import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
 import org.apache.hadoop.ipc.RemoteException;
@@ -79,6 +80,7 @@ public class TestRouterFederationRename extends TestRouterFederationRenameBase {
 
   private RouterContext router;
   private FileSystem routerFS;
+  private MiniRouterDFSCluster cluster;
 
   @BeforeClass
   public static void before() throws Exception {
@@ -95,6 +97,7 @@ public class TestRouterFederationRename extends TestRouterFederationRenameBase {
     setup();
     router = getRouterContext();
     routerFS = getRouterFileSystem();
+    cluster = getCluster();
   }
 
   private void testRenameDir(RouterContext testRouter, String path,

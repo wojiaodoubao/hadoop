@@ -61,7 +61,7 @@ public class TestRouterFederationRenameBase {
   private String nnFile;
 
   /** Federated HDFS cluster. */
-  static MiniRouterDFSCluster cluster;
+  private static MiniRouterDFSCluster cluster;
 
   public static void globalSetUp() throws Exception {
     Configuration namenodeConf = new Configuration();
@@ -194,6 +194,10 @@ public class TestRouterFederationRenameBase {
     createFile(fs, file, 32);
     verifyFileExists(fs, dir);
     verifyFileExists(fs, file);
+  }
+
+  public MiniRouterDFSCluster getCluster() {
+    return cluster;
   }
 
   public MiniRouterDFSCluster.RouterContext getRouterContext() {

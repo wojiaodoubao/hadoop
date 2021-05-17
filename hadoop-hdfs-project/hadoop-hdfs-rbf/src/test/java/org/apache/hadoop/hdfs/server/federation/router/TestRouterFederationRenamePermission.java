@@ -64,6 +64,7 @@ public class TestRouterFederationRenamePermission
   private UserGroupInformation foo;
   private MiniRouterDFSCluster.RouterContext router;
   private FileSystem routerFS;
+  private MiniRouterDFSCluster cluster;
 
   @BeforeClass
   public static void before() throws Exception {
@@ -78,6 +79,7 @@ public class TestRouterFederationRenamePermission
   @Before
   public void testSetup() throws Exception {
     setup();
+    cluster = getCluster();
     List<String> nss = cluster.getNameservices();
     srcNs = nss.get(0);
     dstNs = nss.get(1);

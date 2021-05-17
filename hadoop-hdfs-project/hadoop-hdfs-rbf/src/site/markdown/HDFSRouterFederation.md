@@ -517,7 +517,7 @@ Router Federation Rename
 Enable Router to rename across namespaces. Currently it is implemented based on [HDFS Federation Balance](../../../hadoop-federation-balance/HDFSFederationBalance.md) and has some limits comparing with normal rename.
 1. The normal rename is pure meta data operation and very efficient. The router federation rename is much slower. We need to set the rpc timeout high enough so it won't timeout.
 2. It doesn't support snapshot path.
-3. It doesn't support src or dst with multiple destinations.   
+3. It doesn't support src or dst with multiple destinations.
 
 | Property | Default | Description|
 |:---- |:---- |:---- |
