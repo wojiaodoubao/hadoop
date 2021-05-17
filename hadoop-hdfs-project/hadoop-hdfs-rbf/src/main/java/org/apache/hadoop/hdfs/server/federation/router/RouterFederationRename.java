@@ -58,7 +58,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Rename across router based federation namespaces.
+ * Rename across router federation namespaces based on federation balance. Both
+ * the src and the dst coming from different namespaces need to have only one
+ * destination. Snapshot paths are not allowed.
+ * Users need write privilege of both src parent and dst parent to do router
+ * federation rename.
  */
 @InterfaceAudience.Private
 @InterfaceStability.Unstable

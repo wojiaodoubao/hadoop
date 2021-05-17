@@ -77,6 +77,9 @@ public class TestRouterFederationRename extends TestRouterFederationRenameBase {
     }
   }
 
+  private RouterContext router;
+  private FileSystem routerFS;
+
   @BeforeClass
   public static void before() throws Exception {
     globalSetUp();
@@ -90,6 +93,8 @@ public class TestRouterFederationRename extends TestRouterFederationRenameBase {
   @Before
   public void testSetup() throws Exception {
     setup();
+    router = getRouterContext();
+    routerFS = getRouterFileSystem();
   }
 
   private void testRenameDir(RouterContext testRouter, String path,

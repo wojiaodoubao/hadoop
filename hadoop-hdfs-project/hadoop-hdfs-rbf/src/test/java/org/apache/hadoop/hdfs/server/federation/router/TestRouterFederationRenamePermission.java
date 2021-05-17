@@ -27,6 +27,7 @@ import static org.junit.Assert.assertFalse;
 import java.io.IOException;
 import java.util.List;
 
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.FsAction;
@@ -35,6 +36,7 @@ import org.apache.hadoop.fs.permission.AclEntryScope;
 import org.apache.hadoop.fs.permission.AclEntryType;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
+import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster;
 import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -59,7 +61,9 @@ public class TestRouterFederationRenamePermission
   // the dst path.
   private String dstStr;
   private Path dstPath;
-  UserGroupInformation foo;
+  private UserGroupInformation foo;
+  private MiniRouterDFSCluster.RouterContext router;
+  private FileSystem routerFS;
 
   @BeforeClass
   public static void before() throws Exception {
@@ -84,6 +88,8 @@ public class TestRouterFederationRenamePermission
     srcPath = new Path(srcStr);
     dstPath = new Path(dstStr);
     foo = UserGroupInformation.createRemoteUser("foo");
+    router = getRouterContext();
+    routerFS = getRouterFileSystem();
   }
 
   @Test

@@ -49,16 +49,16 @@ public class TestRouterFederationRenameBase {
   static final int NUM_DNS = 6;
 
   /** Random Router for this federated cluster. */
-  protected MiniRouterDFSCluster.RouterContext router;
+  private MiniRouterDFSCluster.RouterContext router;
 
   /** Random nameservice in the federated cluster.  */
-  protected String ns;
+  private String ns;
   /** Filesystem interface to the Router. */
-  protected FileSystem routerFS;
+  private FileSystem routerFS;
   /** Filesystem interface to the Namenode. */
-  protected FileSystem nnFS;
+  private FileSystem nnFS;
   /** File in the Namenode. */
-  protected String nnFile;
+  private String nnFile;
 
   /** Federated HDFS cluster. */
   static MiniRouterDFSCluster cluster;
@@ -179,7 +179,8 @@ public class TestRouterFederationRenameBase {
     this.ns = nameservice;
   }
 
-  protected void setNamenode(MiniRouterDFSCluster.NamenodeContext nn) throws IOException {
+  protected void setNamenode(MiniRouterDFSCluster.NamenodeContext nn)
+      throws IOException {
     this.nnFS = nn.getFileSystem();
   }
 
@@ -193,5 +194,9 @@ public class TestRouterFederationRenameBase {
     createFile(fs, file, 32);
     verifyFileExists(fs, dir);
     verifyFileExists(fs, file);
+  }
+
+  public MiniRouterDFSCluster.RouterContext getRouterContext() {
+    return router;
   }
 }
