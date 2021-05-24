@@ -134,9 +134,6 @@ public class TestRouterFederationRenameBase {
     // Create test fixtures on NN
     cluster.createTestDirectoriesNamenode();
 
-    // Wait to ensure NN has fully created its test directories
-    Thread.sleep(100);
-
     // Random router for this test
     MiniRouterDFSCluster.RouterContext rndRouter = cluster.getRandomRouter();
     this.setRouter(rndRouter);

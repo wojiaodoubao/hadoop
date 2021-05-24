@@ -22,6 +22,7 @@ import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsAction;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.security.AccessControlException;
@@ -186,12 +187,14 @@ public class RouterFederationRename {
 
   static void checkSnapshotPath(RemoteLocation src, RemoteLocation dst)
       throws AccessControlException {
-    if (src.getDest().contains("/.snapshot/")) {
+    if (src.getDest()
+        .contains(HdfsConstants.SEPARATOR_DOT_SNAPSHOT_DIR + Path.SEPARATOR)) {
       throw new AccessControlException(
           "Router federation rename can't rename snapshot path. src=" + src
               .getSrc() + "(" + src + ")");
     }
-    if (dst.getDest().contains("/.snapshot/")) {
+    if (dst.getDest()
+        .contains(HdfsConstants.SEPARATOR_DOT_SNAPSHOT_DIR + Path.SEPARATOR)) {
       throw new AccessControlException(
           "Router federation rename can't rename snapshot path. dst=" + dst
               .getSrc() + "(" + dst + ")");
